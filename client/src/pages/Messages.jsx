@@ -95,7 +95,7 @@ export default function Messages() {
               <div>
                 <p className="font-heading font-bold text-ink text-sm leading-tight">{convoName(active, user)}</p>
                 <p className="text-10 text-fog tracking-wide">
-                  {active.type === 'group' ? `${active.members.length} members` : 'Direct message'}
+                  {active.type === 'group' ? `${active.memberDetails?.length ?? 0} members` : 'Direct message'}
                 </p>
               </div>
             </div>
