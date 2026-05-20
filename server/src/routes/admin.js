@@ -35,14 +35,27 @@ function getTwoWeekDates(mondayStr) {
 const SHIFT_SELECT = `id, employee_id AS "employeeId", date::text, start_time AS start,
   end_time AS end, department, position, location, COALESCE(notes,'') AS notes`;
 
+// Returns null for sysadmin (no filter), or the manager's departments array
+function managerDepts(req) {
+  if (req.user.role === 'sysadmin') return null;
+  return req.user.departments ?? [];
+}
+
 // ── Stats ─────────────────────────────────────────────────────────────────────
-router.get('/stats', requireAdmin, async (_req, res) => {
+router.get('/stats', requireAdmin, async (req, res) => {
   const today = new Date().toISOString().slice(0, 10);
+  const depts = managerDepts(req);
   try {
     const [staffRes, todayRes, weekRes] = await Promise.all([
-      pool.query(`SELECT COUNT(*) FROM employees WHERE is_active = true AND role = 'crew_member'`),
-      pool.query(`SELECT COUNT(*) FROM shifts WHERE date = $1`, [today]),
-      pool.query(`SELECT COUNT(*) FROM shifts WHERE date >= date_trunc('week', CURRENT_DATE)`),
+      depts
+        ? pool.query(`SELECT COUNT(*) FROM employees WHERE is_active = true AND role = 'crew_member' AND departments && $1::text[]`, [depts])
+        : pool.query(`SELECT COUNT(*) FROM employees WHERE is_active = true AND role = 'crew_member'`),
+      depts
+        ? pool.query(`SELECT COUNT(*) FROM shifts WHERE date = $1 AND department = ANY($2::text[])`, [today, depts])
+        : pool.query(`SELECT COUNT(*) FROM shifts WHERE date = $1`, [today]),
+      depts
+        ? pool.query(`SELECT COUNT(*) FROM shifts WHERE date >= date_trunc('week', CURRENT_DATE) AND department = ANY($1::text[])`, [depts])
+        : pool.query(`SELECT COUNT(*) FROM shifts WHERE date >= date_trunc('week', CURRENT_DATE)`),
     ]);
     res.json({
       totalStaff:     parseInt(staffRes.rows[0].count),
@@ -91,8 +104,8 @@ router.patch('/employees/:id/password', requireAdmin, async (req, res) => {
 const VALID_DEPARTMENTS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew', 'Management'];
 router.patch('/employees/:id/departments', requireAdmin, async (req, res) => {
   const { departments } = req.body;
-  if (!Array.isArray(departments) || departments.length === 0) {
-    return res.status(400).json({ error: 'departments must be a non-empty array.' });
+  if (!Array.isArray(departments)) {
+    return res.status(400).json({ error: 'departments must be an array.' });
   }
   const invalid = departments.filter(d => !VALID_DEPARTMENTS.includes(d));
   if (invalid.length) {
@@ -102,7 +115,7 @@ router.patch('/employees/:id/departments', requireAdmin, async (req, res) => {
     const { rows } = await pool.query(
       `UPDATE employees SET departments = $1, department = $2 WHERE id = $3
        RETURNING id, email, name, role, department, departments, position, avatar, phone`,
-      [departments, departments[0], parseInt(req.params.id)]
+      [departments, departments[0] || null, parseInt(req.params.id)]
     );
     if (!rows[0]) return res.status(404).json({ error: 'User not found' });
     res.json({ user: rows[0] });
@@ -114,15 +127,25 @@ router.patch('/employees/:id/departments', requireAdmin, async (req, res) => {
 // ── Daily schedule view ───────────────────────────────────────────────────────
 router.get('/schedule', requireAdmin, async (req, res) => {
   const target = req.query.date || new Date().toISOString().slice(0, 10);
+  const depts = managerDepts(req);
   try {
-    const { rows } = await pool.query(
-      `SELECT s.id, s.employee_id AS "employeeId", s.date::text, s.start_time AS start,
-              s.end_time AS end, s.department, s.position, s.location,
-              COALESCE(s.notes,'') AS notes, e.name AS "employeeName", e.avatar
-       FROM shifts s JOIN employees e ON e.id = s.employee_id
-       WHERE s.date = $1 ORDER BY s.start_time`,
-      [target]
-    );
+    const { rows } = depts
+      ? await pool.query(
+          `SELECT s.id, s.employee_id AS "employeeId", s.date::text, s.start_time AS start,
+                  s.end_time AS end, s.department, s.position, s.location,
+                  COALESCE(s.notes,'') AS notes, e.name AS "employeeName", e.avatar
+           FROM shifts s JOIN employees e ON e.id = s.employee_id
+           WHERE s.date = $1 AND s.department = ANY($2::text[]) ORDER BY s.start_time`,
+          [target, depts]
+        )
+      : await pool.query(
+          `SELECT s.id, s.employee_id AS "employeeId", s.date::text, s.start_time AS start,
+                  s.end_time AS end, s.department, s.position, s.location,
+                  COALESCE(s.notes,'') AS notes, e.name AS "employeeName", e.avatar
+           FROM shifts s JOIN employees e ON e.id = s.employee_id
+           WHERE s.date = $1 ORDER BY s.start_time`,
+          [target]
+        );
     res.json({ date: target, shifts: rows });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch schedule' });
@@ -133,11 +156,17 @@ router.get('/schedule', requireAdmin, async (req, res) => {
 router.get('/scheduler', requireAdmin, async (req, res) => {
   const weekStart = req.query.weekStart || getMondayOfWeek(new Date());
   const days = getWeekDates(weekStart);
+  const depts = managerDepts(req);
   try {
     const [empRes, shiftRes] = await Promise.all([
-      pool.query(`SELECT id, email, name, role, department, departments, position, avatar, phone,
-                         hire_date AS "hireDate" FROM employees WHERE is_active = true ORDER BY name`),
-      pool.query(`SELECT ${SHIFT_SELECT} FROM shifts WHERE date = ANY($1::date[]) ORDER BY date, start_time`, [days]),
+      depts
+        ? pool.query(`SELECT id, email, name, role, department, departments, position, avatar, phone,
+                             hire_date AS "hireDate" FROM employees WHERE is_active = true AND departments && $1::text[] ORDER BY name`, [depts])
+        : pool.query(`SELECT id, email, name, role, department, departments, position, avatar, phone,
+                             hire_date AS "hireDate" FROM employees WHERE is_active = true ORDER BY name`),
+      depts
+        ? pool.query(`SELECT ${SHIFT_SELECT} FROM shifts WHERE date = ANY($1::date[]) AND department = ANY($2::text[]) ORDER BY date, start_time`, [days, depts])
+        : pool.query(`SELECT ${SHIFT_SELECT} FROM shifts WHERE date = ANY($1::date[]) ORDER BY date, start_time`, [days]),
     ]);
     res.json({ weekStart, days, employees: empRes.rows, shifts: shiftRes.rows });
   } catch (err) {
@@ -149,6 +178,10 @@ router.post('/scheduler/shifts', requireAdmin, async (req, res) => {
   const { employeeId, date, start, end, department, position, location, notes } = req.body;
   if (!employeeId || !date || !start || !end) {
     return res.status(400).json({ error: 'employeeId, date, start, and end are required.' });
+  }
+  const depts = managerDepts(req);
+  if (depts && department && !depts.includes(department)) {
+    return res.status(403).json({ error: 'You do not have access to this department.' });
   }
   try {
     const { rows } = await pool.query(
@@ -164,6 +197,13 @@ router.post('/scheduler/shifts', requireAdmin, async (req, res) => {
 
 router.patch('/scheduler/shifts/:id', requireAdmin, async (req, res) => {
   const { employeeId, date, start, end, department, position, location, notes } = req.body;
+  const depts = managerDepts(req);
+  if (depts) {
+    const { rows: cur } = await pool.query(`SELECT department FROM shifts WHERE id = $1`, [parseInt(req.params.id)]);
+    if (!cur[0]) return res.status(404).json({ error: 'Shift not found.' });
+    if (!depts.includes(cur[0].department)) return res.status(403).json({ error: 'You do not have access to this department.' });
+    if (department && !depts.includes(department)) return res.status(403).json({ error: 'You do not have access to this department.' });
+  }
   try {
     const { rows } = await pool.query(
       `UPDATE shifts SET
@@ -189,6 +229,12 @@ router.patch('/scheduler/shifts/:id', requireAdmin, async (req, res) => {
 });
 
 router.delete('/scheduler/shifts/:id', requireAdmin, async (req, res) => {
+  const depts = managerDepts(req);
+  if (depts) {
+    const { rows: cur } = await pool.query(`SELECT department FROM shifts WHERE id = $1`, [parseInt(req.params.id)]);
+    if (!cur[0]) return res.status(404).json({ error: 'Shift not found.' });
+    if (!depts.includes(cur[0].department)) return res.status(403).json({ error: 'You do not have access to this department.' });
+  }
   try {
     const { rowCount } = await pool.query(`DELETE FROM shifts WHERE id = $1`, [parseInt(req.params.id)]);
     if (!rowCount) return res.status(404).json({ error: 'Shift not found.' });
@@ -202,11 +248,17 @@ router.delete('/scheduler/shifts/:id', requireAdmin, async (req, res) => {
 router.get('/scheduler/plan', requireAdmin, async (req, res) => {
   const weekStart = req.query.weekStart || getMondayOfWeek(new Date());
   const days = getWeekDates(weekStart);
+  const depts = managerDepts(req);
   try {
     const [empRes, shiftRes] = await Promise.all([
-      pool.query(`SELECT id, email, name, role, department, departments, position, avatar, phone,
-                         hire_date AS "hireDate" FROM employees WHERE is_active = true ORDER BY name`),
-      pool.query(`SELECT ${SHIFT_SELECT} FROM draft_shifts WHERE date = ANY($1::date[]) ORDER BY date, start_time`, [days]),
+      depts
+        ? pool.query(`SELECT id, email, name, role, department, departments, position, avatar, phone,
+                             hire_date AS "hireDate" FROM employees WHERE is_active = true AND departments && $1::text[] ORDER BY name`, [depts])
+        : pool.query(`SELECT id, email, name, role, department, departments, position, avatar, phone,
+                             hire_date AS "hireDate" FROM employees WHERE is_active = true ORDER BY name`),
+      depts
+        ? pool.query(`SELECT ${SHIFT_SELECT} FROM draft_shifts WHERE date = ANY($1::date[]) AND department = ANY($2::text[]) ORDER BY date, start_time`, [days, depts])
+        : pool.query(`SELECT ${SHIFT_SELECT} FROM draft_shifts WHERE date = ANY($1::date[]) ORDER BY date, start_time`, [days]),
     ]);
     res.json({ weekStart, days, employees: empRes.rows, shifts: shiftRes.rows });
   } catch (err) {
@@ -218,6 +270,10 @@ router.post('/scheduler/plan/shifts', requireAdmin, async (req, res) => {
   const { employeeId, date, start, end, department, position, location, notes } = req.body;
   if (!employeeId || !date || !start || !end) {
     return res.status(400).json({ error: 'employeeId, date, start, and end are required.' });
+  }
+  const depts = managerDepts(req);
+  if (depts && department && !depts.includes(department)) {
+    return res.status(403).json({ error: 'You do not have access to this department.' });
   }
   try {
     const { rows } = await pool.query(
@@ -233,6 +289,13 @@ router.post('/scheduler/plan/shifts', requireAdmin, async (req, res) => {
 
 router.patch('/scheduler/plan/shifts/:id', requireAdmin, async (req, res) => {
   const { employeeId, date, start, end, department, position, location, notes } = req.body;
+  const depts = managerDepts(req);
+  if (depts) {
+    const { rows: cur } = await pool.query(`SELECT department FROM draft_shifts WHERE id = $1`, [parseInt(req.params.id)]);
+    if (!cur[0]) return res.status(404).json({ error: 'Draft shift not found.' });
+    if (!depts.includes(cur[0].department)) return res.status(403).json({ error: 'You do not have access to this department.' });
+    if (department && !depts.includes(department)) return res.status(403).json({ error: 'You do not have access to this department.' });
+  }
   try {
     const { rows } = await pool.query(
       `UPDATE draft_shifts SET
@@ -258,6 +321,12 @@ router.patch('/scheduler/plan/shifts/:id', requireAdmin, async (req, res) => {
 });
 
 router.delete('/scheduler/plan/shifts/:id', requireAdmin, async (req, res) => {
+  const depts = managerDepts(req);
+  if (depts) {
+    const { rows: cur } = await pool.query(`SELECT department FROM draft_shifts WHERE id = $1`, [parseInt(req.params.id)]);
+    if (!cur[0]) return res.status(404).json({ error: 'Draft shift not found.' });
+    if (!depts.includes(cur[0].department)) return res.status(403).json({ error: 'You do not have access to this department.' });
+  }
   try {
     const { rowCount } = await pool.query(`DELETE FROM draft_shifts WHERE id = $1`, [parseInt(req.params.id)]);
     if (!rowCount) return res.status(404).json({ error: 'Draft shift not found.' });
@@ -270,28 +339,41 @@ router.delete('/scheduler/plan/shifts/:id', requireAdmin, async (req, res) => {
 router.post('/scheduler/plan/publish', requireAdmin, async (req, res) => {
   const { from, to } = req.body;
   if (!from || !to) return res.status(400).json({ error: 'from and to dates are required.' });
-  const client = await pool.connect();
+  const depts = managerDepts(req);
+  const pgClient = await pool.connect();
   try {
-    await client.query('BEGIN');
-    const { rows: drafts } = await client.query(
-      `SELECT * FROM draft_shifts WHERE date >= $1 AND date <= $2`, [from, to]
-    );
-    if (!drafts.length) { await client.query('COMMIT'); return res.json({ published: 0 }); }
+    await pgClient.query('BEGIN');
+    const { rows: drafts } = depts
+      ? await pgClient.query(
+          `SELECT * FROM draft_shifts WHERE date >= $1 AND date <= $2 AND department = ANY($3::text[])`,
+          [from, to, depts]
+        )
+      : await pgClient.query(
+          `SELECT * FROM draft_shifts WHERE date >= $1 AND date <= $2`, [from, to]
+        );
+    if (!drafts.length) { await pgClient.query('COMMIT'); return res.json({ published: 0 }); }
     for (const d of drafts) {
-      await client.query(
+      await pgClient.query(
         `INSERT INTO shifts (employee_id,date,start_time,end_time,department,position,location,notes)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
         [d.employee_id, d.date, d.start_time, d.end_time, d.department, d.position, d.location, d.notes]
       );
     }
-    await client.query(`DELETE FROM draft_shifts WHERE date >= $1 AND date <= $2`, [from, to]);
-    await client.query('COMMIT');
+    if (depts) {
+      await pgClient.query(
+        `DELETE FROM draft_shifts WHERE date >= $1 AND date <= $2 AND department = ANY($3::text[])`,
+        [from, to, depts]
+      );
+    } else {
+      await pgClient.query(`DELETE FROM draft_shifts WHERE date >= $1 AND date <= $2`, [from, to]);
+    }
+    await pgClient.query('COMMIT');
     res.json({ published: drafts.length });
   } catch (err) {
-    await client.query('ROLLBACK');
+    await pgClient.query('ROLLBACK');
     res.status(500).json({ error: 'Failed to publish shifts' });
   } finally {
-    client.release();
+    pgClient.release();
   }
 });
 

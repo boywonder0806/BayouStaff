@@ -214,6 +214,16 @@ export default function SystemAdmin() {
   );
 }
 
+const ALL_DEPARTMENTS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew', 'Management'];
+
+const DEPT_STYLES = {
+  'Aquatics':        { active: 'bg-aq/15 border-aq/40 text-aq',   base: 'text-aq'   },
+  'Guest Services':  { active: 'bg-gs/15 border-gs/40 text-gs',   base: 'text-gs'   },
+  'Food & Beverage': { active: 'bg-fb/15 border-fb/40 text-fb',   base: 'text-fb'   },
+  'Cleaning Crew':   { active: 'bg-cc/15 border-cc/40 text-cc',   base: 'text-cc'   },
+  'Management':      { active: 'bg-mgmt/15 border-mgmt/40 text-mgmt', base: 'text-mgmt' },
+};
+
 // ── User Management Modal ─────────────────────────────────────────────────────
 function UserModal({ user, isSelf, onClose, onRoleUpdate, onStaffUpdate }) {
   const navigate = useNavigate();
@@ -225,6 +235,9 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate, onStaffUpdate }) {
   const [pwError, setPwError]             = useState('');
   const [pwSuccess, setPwSuccess]         = useState(false);
   const [deactivateStep, setDeactivateStep] = useState(false);
+  const [deptAccess, setDeptAccess]       = useState(user.departments ?? []);
+  const [deptSaving, setDeptSaving]       = useState(false);
+  const [deptSuccess, setDeptSuccess]     = useState(false);
 
   const role = ROLES.find(r => r.value === user.role) ?? ROLES[0];
 
@@ -258,6 +271,27 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate, onStaffUpdate }) {
       setPwError(err.response?.data?.error || 'Failed to reset password.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  function toggleDept(dept) {
+    setDeptAccess(prev =>
+      prev.includes(dept) ? prev.filter(d => d !== dept) : [...prev, dept]
+    );
+    setDeptSuccess(false);
+  }
+
+  async function handleDeptSave() {
+    setDeptSaving(true);
+    try {
+      const { data } = await api.patch(`/admin/employees/${user.id}/departments`, { departments: deptAccess });
+      onStaffUpdate(data.user);
+      setDeptSuccess(true);
+      setTimeout(() => setDeptSuccess(false), 2500);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDeptSaving(false);
     }
   }
 
@@ -332,6 +366,45 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate, onStaffUpdate }) {
               ))}
             </div>
           </div>
+
+          {/* Department Access — managers only */}
+          {user.role === 'manager' && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <p className="label-xs">Department Access</p>
+                {deptSuccess && <span className="text-10 text-green-400 font-semibold">Saved.</span>}
+              </div>
+              <p className="text-10 text-fog mb-3">This manager can only view and edit shifts in the selected departments.</p>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {ALL_DEPARTMENTS.map(d => {
+                  const isOn = deptAccess.includes(d);
+                  const style = DEPT_STYLES[d];
+                  return (
+                    <button
+                      key={d}
+                      onClick={() => !isSelf && toggleDept(d)}
+                      disabled={isSelf}
+                      className={`px-3 py-2 rounded-lg border text-xs font-bold tracking-wide transition-all
+                        ${isOn
+                          ? style.active + ' ring-1 ring-inset ring-current/20'
+                          : 'bg-shell/40 border-rim/50 text-fog hover:border-rim hover:text-fog-hi'
+                        }
+                        ${isSelf ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                      {d}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                onClick={handleDeptSave}
+                disabled={deptSaving || isSelf}
+                className="btn-primary text-xs px-4 py-2"
+              >
+                {deptSaving ? 'Saving…' : 'Save Department Access'}
+              </button>
+            </div>
+          )}
 
           {/* Account actions */}
           <div>

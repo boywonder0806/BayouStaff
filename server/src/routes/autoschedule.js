@@ -21,6 +21,15 @@ router.post('/', requireAdmin, async (req, res) => {
 
   if (!weekStart) return res.status(400).json({ error: 'weekStart is required.' });
 
+  // Managers can only auto-schedule their own departments
+  const managerDepts = req.user.role === 'sysadmin' ? null : (req.user.departments ?? []);
+  if (managerDepts) {
+    const forbidden = departments.filter(d => !managerDepts.includes(d));
+    if (forbidden.length) {
+      return res.status(403).json({ error: `You do not have access to: ${forbidden.join(', ')}` });
+    }
+  }
+
   try {
     // Build the 7-day window
     const base = new Date(weekStart + 'T00:00:00');
@@ -30,12 +39,19 @@ router.post('/', requireAdmin, async (req, res) => {
       return d.toISOString().slice(0, 10);
     });
 
-    // Fetch active employees
-    const { rows: employees } = await pool.query(
-      `SELECT id, name, department, departments, position
-       FROM employees WHERE is_active = true AND role = 'crew_member'
-       ORDER BY name`
-    );
+    // Fetch active employees — filter to manager's departments if applicable
+    const { rows: employees } = managerDepts
+      ? await pool.query(
+          `SELECT id, name, department, departments, position
+           FROM employees WHERE is_active = true AND role = 'crew_member' AND departments && $1::text[]
+           ORDER BY name`,
+          [managerDepts]
+        )
+      : await pool.query(
+          `SELECT id, name, department, departments, position
+           FROM employees WHERE is_active = true AND role = 'crew_member'
+           ORDER BY name`
+        );
 
     // Fetch any existing draft shifts for this week (so Claude avoids duplicating)
     const { rows: existing } = await pool.query(
