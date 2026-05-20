@@ -38,15 +38,6 @@ const DEPT_META = [
     bgClass: 'bg-cc/10',
     description: 'Park-wide cleanliness, sanitation, and waste management to ensure a safe and welcoming environment.',
   },
-  {
-    id: 'management',
-    name: 'Management',
-    colorClass: 'text-mgmt',
-    barClass: 'bg-mgmt',
-    borderClass: 'border-mgmt/40',
-    bgClass: 'bg-mgmt/10',
-    description: 'Park leadership, operations oversight, and cross-departmental coordination.',
-  },
 ];
 
 export default function SysAdminDepartments() {

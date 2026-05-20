@@ -101,7 +101,7 @@ router.patch('/employees/:id/password', requireAdmin, async (req, res) => {
   }
 });
 
-const VALID_DEPARTMENTS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew', 'Management'];
+const VALID_DEPARTMENTS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew'];
 router.patch('/employees/:id/departments', requireAdmin, async (req, res) => {
   const { departments } = req.body;
   if (!Array.isArray(departments)) {

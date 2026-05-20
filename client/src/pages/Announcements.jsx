@@ -4,7 +4,7 @@ import api from '../lib/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { DEPT_COLOR } from '../components/Layout/Sidebar.jsx';
 
-const DEPARTMENTS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew', 'Management'];
+const DEPARTMENTS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew'];
 
 const DEPT_PILL = {
   'Aquatics':        'bg-aq/10 border-aq/30 text-aq',

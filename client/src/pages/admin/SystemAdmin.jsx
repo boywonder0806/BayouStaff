@@ -214,7 +214,7 @@ export default function SystemAdmin() {
   );
 }
 
-const ALL_DEPARTMENTS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew', 'Management'];
+const ALL_DEPARTMENTS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew'];
 
 const DEPT_STYLES = {
   'Aquatics':        { active: 'bg-aq/15 border-aq/40 text-aq',   base: 'text-aq'   },

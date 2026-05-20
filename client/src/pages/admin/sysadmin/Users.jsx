@@ -10,7 +10,7 @@ export const ROLES = [
   { value: 'sysadmin',    label: 'System Administrator', style: 'bg-gold/10 border-gold/25 text-gold',     active: 'bg-gold/15 border-gold/40 text-gold'  },
 ];
 
-const DEPT_FILTERS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew', 'Management'];
+const DEPT_FILTERS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew'];
 
 const DEPT_PILL = {
   'Aquatics':        'bg-aq/10 border-aq/30 text-aq',
