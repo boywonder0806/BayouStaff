@@ -201,7 +201,7 @@ router.delete('/scheduler/shifts/:id', requireAdmin, async (req, res) => {
 // ── Plan Schedule (draft) ─────────────────────────────────────────────────────
 router.get('/scheduler/plan', requireAdmin, async (req, res) => {
   const weekStart = req.query.weekStart || getMondayOfWeek(new Date());
-  const days = getTwoWeekDates(weekStart);
+  const days = getWeekDates(weekStart);
   try {
     const [empRes, shiftRes] = await Promise.all([
       pool.query(`SELECT id, email, name, role, department, departments, position, avatar, phone,

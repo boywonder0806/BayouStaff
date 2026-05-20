@@ -66,7 +66,7 @@ export default function PlanSchedule() {
   }, [ctxMenu]);
 
   const nav = dir => setWeekStart(w =>
-    format(dir === 'prev' ? subWeeks(parseISO(w), 2) : addWeeks(parseISO(w), 2), 'yyyy-MM-dd')
+    format(dir === 'prev' ? subWeeks(parseISO(w), 1) : addWeeks(parseISO(w), 1), 'yyyy-MM-dd')
   );
 
   function showToast(msg, type = 'success') {
@@ -112,7 +112,7 @@ export default function PlanSchedule() {
     if (!window.confirm(`Publish ${shifts.length} draft shift${shifts.length !== 1 ? 's' : ''} to Current Schedule?\n\nThis will make them visible to all staff.`)) return;
     setPublishing(true);
     try {
-      const res = await api.post('/admin/scheduler/plan/publish', { from: days[0], to: days[13] });
+      const res = await api.post('/admin/scheduler/plan/publish', { from: days[0], to: days[6] });
       showToast(`${res.data.published} shift${res.data.published !== 1 ? 's' : ''} published to Current Schedule.`);
       load();
     } catch {
@@ -179,8 +179,6 @@ export default function PlanSchedule() {
   }
 
   const days   = data?.days ?? [];
-  const week1  = days.slice(0, 7);
-  const week2  = days.slice(7, 14);
   const shifts = data?.shifts ?? [];
 
   const draftHours = useCallback(empId =>
@@ -233,7 +231,7 @@ export default function PlanSchedule() {
               <button onClick={() => nav('prev')} className="text-fog hover:text-ink transition-colors text-lg font-bold">‹‹</button>
               <h2 className="font-heading font-bold text-amber-400 text-xl tracking-tight">
                 {days.length
-                  ? `${format(parseISO(days[0]), 'MMM d')} – ${format(parseISO(days[13]), 'MMM d, yyyy')}`
+                  ? `${format(parseISO(days[0]), 'MMM d')} – ${format(parseISO(days[6]), 'MMM d, yyyy')}`
                   : '—'}
               </h2>
               <button onClick={() => nav('next')} className="text-fog hover:text-ink transition-colors text-lg font-bold">››</button>
@@ -270,30 +268,8 @@ export default function PlanSchedule() {
           {loading ? (
             <div className="flex items-center justify-center h-48 text-fog text-sm">Loading draft…</div>
           ) : (
-            <table className="w-full border-collapse" style={{ minWidth: 1180 }}>
+            <table className="w-full border-collapse" style={{ minWidth: 860 }}>
               <thead>
-                {/* Week group row */}
-                <tr>
-                  <th className="bg-deep border-b border-r border-rim/20 w-44" />
-                  <th className="bg-deep border-b border-r border-rim/20 w-14" />
-                  <th
-                    colSpan={7}
-                    className="bg-deep border-b border-r border-rim/20 px-4 py-1.5 text-left"
-                  >
-                    <span className="label-xs text-amber-400/80">
-                      Week 1 — {week1.length ? format(parseISO(week1[0]), 'MMM d') : ''}
-                    </span>
-                  </th>
-                  <th
-                    colSpan={7}
-                    className="bg-deep border-b border-rim/20 px-4 py-1.5 text-left border-l-2 border-l-amber-500/20"
-                  >
-                    <span className="label-xs text-amber-400/80">
-                      Week 2 — {week2.length ? format(parseISO(week2[0]), 'MMM d') : ''}
-                    </span>
-                  </th>
-                </tr>
-                {/* Column headers */}
                 <tr>
                   <th className="sticky left-0 top-0 z-20 bg-deep border-b border-r border-rim/40 px-4 py-2 text-left w-44">
                     <div className="flex items-center justify-between">
@@ -321,8 +297,7 @@ export default function PlanSchedule() {
                     return (
                       <th
                         key={day}
-                        className={`sticky top-0 z-10 border-b border-r border-rim/40 px-3 py-2 text-center bg-deep
-                          ${i === 7 ? 'border-l-2 border-l-amber-500/20' : ''}`}
+                        className="sticky top-0 z-10 border-b border-r border-rim/40 px-3 py-2 text-center bg-deep"
                         style={{ minWidth: 100 }}
                       >
                         <p className="label-xs text-fog">{DAY_LABELS[i % 7]}</p>
@@ -339,7 +314,7 @@ export default function PlanSchedule() {
               <tbody>
                 {employees.length === 0 ? (
                   <tr>
-                    <td colSpan={16} className="text-center text-fog text-sm py-16">No staff match this filter.</td>
+                    <td colSpan={9} className="text-center text-fog text-sm py-16">No staff match this filter.</td>
                   </tr>
                 ) : employees.map((emp, ri) => {
                   const hrs = draftHours(emp.id);
@@ -378,7 +353,6 @@ export default function PlanSchedule() {
                             onDrop={e => handleDrop(e, emp.id, day)}
                             className={`border-b border-r border-rim/40 px-1.5 py-1.5 align-top cursor-pointer
                               transition-colors group
-                              ${di === 7 ? 'border-l-2 border-l-amber-500/20' : ''}
                               ${isDropTgt ? 'bg-amber-500/20 ring-1 ring-inset ring-amber-500/40' : 'hover:bg-amber-500/5'}`}
                             style={{ height: 72 }}
                           >
