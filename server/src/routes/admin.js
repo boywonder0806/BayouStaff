@@ -1,17 +1,9 @@
 import { Router } from 'express';
-import { MOCK_USERS, MOCK_SHIFTS, MOCK_DRAFT_SHIFTS } from '../data/mockData.js';
+import bcrypt from 'bcryptjs';
+import pool from '../db/index.js';
 import { requireAdmin, requireSysAdmin } from '../middleware/auth.js';
 
-let nextShiftId = MOCK_SHIFTS.length + 1;
-let nextDraftId = 2000;
-
-function getMondayOfWeek(date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  return d.toISOString().slice(0, 10);
-}
+const router = Router();
 
 function getWeekDates(mondayStr) {
   const base = new Date(mondayStr + 'T00:00:00');
@@ -31,209 +23,274 @@ function getTwoWeekDates(mondayStr) {
   });
 }
 
-const router = Router();
+function getMondayOfWeek(date) {
+  const d = new Date(date);
+  const diff = d.getDay() === 0 ? -6 : 1 - d.getDay();
+  d.setDate(d.getDate() + diff);
+  return d.toISOString().slice(0, 10);
+}
 
-// GET /api/admin/stats
-router.get('/stats', requireAdmin, (_req, res) => {
+const EMP_SELECT = `
+  id, email, name, role, department, departments, position, avatar, phone,
+  hire_date AS "hireDate", is_active AS "isActive", created_at AS "createdAt"
+`;
+
+const SHIFT_SELECT = `
+  id, employee_id AS "employeeId", date::text, start_time AS start, end_time AS end,
+  department, position, location, COALESCE(notes,'') AS notes
+`;
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
+router.get('/stats', requireAdmin, async (_req, res) => {
   const today = new Date().toISOString().slice(0, 10);
-  const todayShifts = MOCK_SHIFTS.filter(s => s.date === today);
-  const activeEmployees = MOCK_USERS.filter(u => u.role === 'crew_member');
-
-  res.json({
-    totalStaff: activeEmployees.length,
-    onDutyToday: todayShifts.length,
-    shiftsThisWeek: MOCK_SHIFTS.length,
-    openRequests: 1, // placeholder
-  });
-});
-
-// GET /api/admin/employees
-router.get('/employees', requireAdmin, (_req, res) => {
-  const employees = MOCK_USERS.map(({ password: _pw, ...u }) => u);
-  res.json({ employees });
-});
-
-// GET /api/admin/schedule?date=2026-05-18
-router.get('/schedule', requireAdmin, (req, res) => {
-  const { date } = req.query;
-  const target = date || new Date().toISOString().slice(0, 10);
-
-  const shifts = MOCK_SHIFTS
-    .filter(s => s.date === target)
-    .map(s => {
-      const emp = MOCK_USERS.find(u => u.id === s.employeeId);
-      return { ...s, employeeName: emp?.name, avatar: emp?.avatar };
+  try {
+    const [staffRes, todayRes, weekRes] = await Promise.all([
+      pool.query(`SELECT COUNT(*) FROM employees WHERE is_active = TRUE AND role != 'sysadmin'`),
+      pool.query(`SELECT COUNT(*) FROM shifts WHERE date = $1`, [today]),
+      pool.query(`SELECT COUNT(*) FROM shifts WHERE date >= date_trunc('week', NOW())::date AND date < (date_trunc('week', NOW()) + interval '7 days')::date`),
+    ]);
+    res.json({
+      totalStaff:      parseInt(staffRes.rows[0].count),
+      onDutyToday:     parseInt(todayRes.rows[0].count),
+      shiftsThisWeek:  parseInt(weekRes.rows[0].count),
+      openRequests:    0,
     });
-
-  res.json({ date: target, shifts });
+  } catch (err) {
+    console.error('Stats error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
 });
 
-// PATCH /api/admin/employees/:id/password — manager or sysadmin
-router.patch('/employees/:id/password', requireAdmin, (req, res) => {
+// ── Employees ─────────────────────────────────────────────────────────────────
+
+router.get('/employees', requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await pool.query(`SELECT ${EMP_SELECT} FROM employees WHERE is_active = TRUE ORDER BY name`);
+    res.json({ employees: rows });
+  } catch (err) {
+    console.error('Employees error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch employees' });
+  }
+});
+
+router.get('/schedule', requireAdmin, async (req, res) => {
+  const target = req.query.date || new Date().toISOString().slice(0, 10);
+  try {
+    const { rows } = await pool.query(
+      `SELECT s.${SHIFT_SELECT.replace(/\n/g,' ')}, e.name AS "employeeName", e.avatar
+       FROM shifts s JOIN employees e ON e.id = s.employee_id
+       WHERE s.date = $1 ORDER BY s.start_time`,
+      [target]
+    );
+    res.json({ date: target, shifts: rows });
+  } catch (err) {
+    console.error('Admin schedule error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch schedule' });
+  }
+});
+
+const VALID_DEPTS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew', 'Management'];
+
+router.patch('/employees/:id/password', requireAdmin, async (req, res) => {
   const { password } = req.body;
-  if (!password || password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+  if (!password || password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+  try {
+    const hash = await bcrypt.hash(password, 10);
+    const { rowCount } = await pool.query('UPDATE employees SET password_hash=$1 WHERE id=$2', [hash, parseInt(req.params.id)]);
+    if (!rowCount) return res.status(404).json({ error: 'User not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Password update error:', err.message);
+    res.status(500).json({ error: 'Failed to update password' });
   }
-  const user = MOCK_USERS.find(u => u.id === parseInt(req.params.id));
-  if (!user) return res.status(404).json({ error: 'User not found' });
-  user.password = password;
-  res.json({ success: true });
 });
 
-// PATCH /api/admin/employees/:id/departments — manager or sysadmin
-const VALID_DEPARTMENTS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew', 'Management'];
-router.patch('/employees/:id/departments', requireAdmin, (req, res) => {
+router.patch('/employees/:id/departments', requireAdmin, async (req, res) => {
   const { departments } = req.body;
-  if (!Array.isArray(departments) || departments.length === 0) {
-    return res.status(400).json({ error: 'departments must be a non-empty array.' });
+  if (!Array.isArray(departments) || departments.length === 0) return res.status(400).json({ error: 'departments must be a non-empty array.' });
+  const invalid = departments.filter(d => !VALID_DEPTS.includes(d));
+  if (invalid.length) return res.status(400).json({ error: `Invalid departments: ${invalid.join(', ')}` });
+  try {
+    const { rows } = await pool.query(
+      `UPDATE employees SET departments=$1, department=$2 WHERE id=$3 RETURNING ${EMP_SELECT}`,
+      [departments, departments[0], parseInt(req.params.id)]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'User not found' });
+    res.json({ user: rows[0] });
+  } catch (err) {
+    console.error('Departments update error:', err.message);
+    res.status(500).json({ error: 'Failed to update departments' });
   }
-  const invalid = departments.filter(d => !VALID_DEPARTMENTS.includes(d));
-  if (invalid.length) {
-    return res.status(400).json({ error: `Invalid departments: ${invalid.join(', ')}` });
-  }
-  const user = MOCK_USERS.find(u => u.id === parseInt(req.params.id));
-  if (!user) return res.status(404).json({ error: 'User not found' });
-  user.departments = departments;
-  const { password: _pw, ...safe } = user;
-  res.json({ user: safe });
 });
 
-// ── Scheduler ────────────────────────────────────────────────────────────────
+// ── Scheduler (live shifts) ───────────────────────────────────────────────────
 
-// GET /api/admin/scheduler?weekStart=YYYY-MM-DD
-router.get('/scheduler', requireAdmin, (req, res) => {
+router.get('/scheduler', requireAdmin, async (req, res) => {
   const weekStart = req.query.weekStart || getMondayOfWeek(new Date());
   const days = getWeekDates(weekStart);
-  const employees = MOCK_USERS.map(({ password: _pw, ...u }) => u);
-  const shifts = MOCK_SHIFTS.filter(s => days.includes(s.date));
-  res.json({ weekStart, days, employees, shifts });
+  try {
+    const [empsRes, shiftsRes] = await Promise.all([
+      pool.query(`SELECT ${EMP_SELECT} FROM employees WHERE is_active=TRUE ORDER BY name`),
+      pool.query(`SELECT ${SHIFT_SELECT} FROM shifts WHERE date = ANY($1::date[]) ORDER BY date, start_time`, [days]),
+    ]);
+    res.json({ weekStart, days, employees: empsRes.rows, shifts: shiftsRes.rows });
+  } catch (err) {
+    console.error('Scheduler error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch scheduler' });
+  }
 });
 
-// POST /api/admin/scheduler/shifts
-router.post('/scheduler/shifts', requireAdmin, (req, res) => {
+router.post('/scheduler/shifts', requireAdmin, async (req, res) => {
   const { employeeId, date, start, end, department, position, location, notes } = req.body;
-  if (!employeeId || !date || !start || !end) {
-    return res.status(400).json({ error: 'employeeId, date, start, and end are required.' });
+  if (!employeeId || !date || !start || !end) return res.status(400).json({ error: 'employeeId, date, start, and end are required.' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO shifts (employee_id,date,start_time,end_time,department,position,location,notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING ${SHIFT_SELECT}`,
+      [parseInt(employeeId), date, start, end, department||'', position||'', location||'', notes||'']
+    );
+    res.status(201).json({ shift: rows[0] });
+  } catch (err) {
+    console.error('Create shift error:', err.message);
+    res.status(500).json({ error: 'Failed to create shift' });
   }
-  if (!MOCK_USERS.find(u => u.id === parseInt(employeeId))) {
-    return res.status(404).json({ error: 'Employee not found.' });
+});
+
+router.patch('/scheduler/shifts/:id', requireAdmin, async (req, res) => {
+  const { employeeId, date, start, end, department, position, location, notes } = req.body;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE shifts SET
+         employee_id = COALESCE($1, employee_id),
+         date        = COALESCE($2::date, date),
+         start_time  = COALESCE($3::time, start_time),
+         end_time    = COALESCE($4::time, end_time),
+         department  = COALESCE($5, department),
+         position    = COALESCE($6, position),
+         location    = COALESCE($7, location),
+         notes       = COALESCE($8, notes)
+       WHERE id = $9 RETURNING ${SHIFT_SELECT}`,
+      [employeeId ? parseInt(employeeId) : null, date||null, start||null, end||null,
+       department??null, position??null, location??null, notes??null, parseInt(req.params.id)]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Shift not found.' });
+    res.json({ shift: rows[0] });
+  } catch (err) {
+    console.error('Update shift error:', err.message);
+    res.status(500).json({ error: 'Failed to update shift' });
   }
-  const shift = {
-    id: nextShiftId++,
-    employeeId: parseInt(employeeId),
-    date,
-    start,
-    end,
-    department: department || '',
-    position: position || '',
-    location: location || '',
-    notes: notes || '',
-  };
-  MOCK_SHIFTS.push(shift);
-  res.status(201).json({ shift });
 });
 
-// PATCH /api/admin/scheduler/shifts/:id
-router.patch('/scheduler/shifts/:id', requireAdmin, (req, res) => {
-  const idx = MOCK_SHIFTS.findIndex(s => s.id === parseInt(req.params.id));
-  if (idx === -1) return res.status(404).json({ error: 'Shift not found.' });
-  const allowed = ['date', 'start', 'end', 'department', 'position', 'location', 'notes'];
-  allowed.forEach(k => { if (req.body[k] !== undefined) MOCK_SHIFTS[idx][k] = req.body[k]; });
-  if (req.body.employeeId !== undefined) MOCK_SHIFTS[idx].employeeId = parseInt(req.body.employeeId);
-  res.json({ shift: MOCK_SHIFTS[idx] });
+router.delete('/scheduler/shifts/:id', requireAdmin, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query('DELETE FROM shifts WHERE id=$1', [parseInt(req.params.id)]);
+    if (!rowCount) return res.status(404).json({ error: 'Shift not found.' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete shift error:', err.message);
+    res.status(500).json({ error: 'Failed to delete shift' });
+  }
 });
 
-// DELETE /api/admin/scheduler/shifts/:id
-router.delete('/scheduler/shifts/:id', requireAdmin, (req, res) => {
-  const idx = MOCK_SHIFTS.findIndex(s => s.id === parseInt(req.params.id));
-  if (idx === -1) return res.status(404).json({ error: 'Shift not found.' });
-  MOCK_SHIFTS.splice(idx, 1);
-  res.json({ success: true });
-});
+// ── Plan Schedule (draft shifts) ──────────────────────────────────────────────
 
-// ── Plan Schedule (draft) ─────────────────────────────────────────────────────
-
-// GET /api/admin/scheduler/plan?weekStart=YYYY-MM-DD
-router.get('/scheduler/plan', requireAdmin, (req, res) => {
+router.get('/scheduler/plan', requireAdmin, async (req, res) => {
   const weekStart = req.query.weekStart || getMondayOfWeek(new Date());
   const days = getTwoWeekDates(weekStart);
-  const employees = MOCK_USERS.map(({ password: _pw, ...u }) => u);
-  const shifts = MOCK_DRAFT_SHIFTS.filter(s => days.includes(s.date));
-  res.json({ weekStart, days, employees, shifts });
+  try {
+    const [empsRes, shiftsRes] = await Promise.all([
+      pool.query(`SELECT ${EMP_SELECT} FROM employees WHERE is_active=TRUE ORDER BY name`),
+      pool.query(`SELECT ${SHIFT_SELECT} FROM draft_shifts WHERE date = ANY($1::date[]) ORDER BY date, start_time`, [days]),
+    ]);
+    res.json({ weekStart, days, employees: empsRes.rows, shifts: shiftsRes.rows });
+  } catch (err) {
+    console.error('Plan scheduler error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch plan' });
+  }
 });
 
-// POST /api/admin/scheduler/plan/shifts
-router.post('/scheduler/plan/shifts', requireAdmin, (req, res) => {
+router.post('/scheduler/plan/shifts', requireAdmin, async (req, res) => {
   const { employeeId, date, start, end, department, position, location, notes } = req.body;
-  if (!employeeId || !date || !start || !end) {
-    return res.status(400).json({ error: 'employeeId, date, start, and end are required.' });
+  if (!employeeId || !date || !start || !end) return res.status(400).json({ error: 'employeeId, date, start, and end are required.' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO draft_shifts (employee_id,date,start_time,end_time,department,position,location,notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING ${SHIFT_SELECT}`,
+      [parseInt(employeeId), date, start, end, department||'', position||'', location||'', notes||'']
+    );
+    res.status(201).json({ shift: rows[0] });
+  } catch (err) {
+    console.error('Create draft shift error:', err.message);
+    res.status(500).json({ error: 'Failed to create draft shift' });
   }
-  if (!MOCK_USERS.find(u => u.id === parseInt(employeeId))) {
-    return res.status(404).json({ error: 'Employee not found.' });
+});
+
+router.patch('/scheduler/plan/shifts/:id', requireAdmin, async (req, res) => {
+  const { employeeId, date, start, end, department, position, location, notes } = req.body;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE draft_shifts SET
+         employee_id = COALESCE($1, employee_id),
+         date        = COALESCE($2::date, date),
+         start_time  = COALESCE($3::time, start_time),
+         end_time    = COALESCE($4::time, end_time),
+         department  = COALESCE($5, department),
+         position    = COALESCE($6, position),
+         location    = COALESCE($7, location),
+         notes       = COALESCE($8, notes)
+       WHERE id = $9 RETURNING ${SHIFT_SELECT}`,
+      [employeeId ? parseInt(employeeId) : null, date||null, start||null, end||null,
+       department??null, position??null, location??null, notes??null, parseInt(req.params.id)]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Draft shift not found.' });
+    res.json({ shift: rows[0] });
+  } catch (err) {
+    console.error('Update draft shift error:', err.message);
+    res.status(500).json({ error: 'Failed to update draft shift' });
   }
-  const shift = {
-    id: nextDraftId++,
-    employeeId: parseInt(employeeId),
-    date, start, end,
-    department: department || '',
-    position: position || '',
-    location: location || '',
-    notes: notes || '',
-  };
-  MOCK_DRAFT_SHIFTS.push(shift);
-  res.status(201).json({ shift });
 });
 
-// PATCH /api/admin/scheduler/plan/shifts/:id
-router.patch('/scheduler/plan/shifts/:id', requireAdmin, (req, res) => {
-  const idx = MOCK_DRAFT_SHIFTS.findIndex(s => s.id === parseInt(req.params.id));
-  if (idx === -1) return res.status(404).json({ error: 'Draft shift not found.' });
-  const allowed = ['date', 'start', 'end', 'department', 'position', 'location', 'notes'];
-  allowed.forEach(k => { if (req.body[k] !== undefined) MOCK_DRAFT_SHIFTS[idx][k] = req.body[k]; });
-  if (req.body.employeeId !== undefined) MOCK_DRAFT_SHIFTS[idx].employeeId = parseInt(req.body.employeeId);
-  res.json({ shift: MOCK_DRAFT_SHIFTS[idx] });
+router.delete('/scheduler/plan/shifts/:id', requireAdmin, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query('DELETE FROM draft_shifts WHERE id=$1', [parseInt(req.params.id)]);
+    if (!rowCount) return res.status(404).json({ error: 'Draft shift not found.' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete draft shift error:', err.message);
+    res.status(500).json({ error: 'Failed to delete draft shift' });
+  }
 });
 
-// DELETE /api/admin/scheduler/plan/shifts/:id
-router.delete('/scheduler/plan/shifts/:id', requireAdmin, (req, res) => {
-  const idx = MOCK_DRAFT_SHIFTS.findIndex(s => s.id === parseInt(req.params.id));
-  if (idx === -1) return res.status(404).json({ error: 'Draft shift not found.' });
-  MOCK_DRAFT_SHIFTS.splice(idx, 1);
-  res.json({ success: true });
-});
-
-// POST /api/admin/scheduler/plan/publish  — body: { from, to }
-router.post('/scheduler/plan/publish', requireAdmin, (req, res) => {
+router.post('/scheduler/plan/publish', requireAdmin, async (req, res) => {
   const { from, to } = req.body;
   if (!from || !to) return res.status(400).json({ error: 'from and to dates are required.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: drafts } = await client.query(
+      `SELECT ${SHIFT_SELECT} FROM draft_shifts WHERE date >= $1 AND date <= $2`,
+      [from, to]
+    );
+    if (drafts.length === 0) { await client.query('COMMIT'); return res.json({ published: 0 }); }
 
-  const toPublish = MOCK_DRAFT_SHIFTS.filter(s => s.date >= from && s.date <= to);
-  if (toPublish.length === 0) return res.json({ published: 0 });
-
-  toPublish.forEach(({ id: _draftId, ...fields }) => {
-    MOCK_SHIFTS.push({ ...fields, id: nextShiftId++ });
-  });
-
-  const publishedIds = new Set(toPublish.map(s => s.id));
-  const remaining = MOCK_DRAFT_SHIFTS.filter(s => !publishedIds.has(s.id));
-  MOCK_DRAFT_SHIFTS.length = 0;
-  MOCK_DRAFT_SHIFTS.push(...remaining);
-
-  res.json({ published: toPublish.length });
-});
-
-// PATCH /api/admin/employees/:id/role — sysadmin only
-router.patch('/employees/:id/role', requireSysAdmin, (req, res) => {
-  const { role } = req.body;
-  const VALID_ROLES = ['crew_member', 'manager', 'sysadmin'];
-  if (!VALID_ROLES.includes(role)) {
-    return res.status(400).json({ error: 'Invalid role. Must be crew_member, manager, or sysadmin.' });
+    for (const d of drafts) {
+      await client.query(
+        `INSERT INTO shifts (employee_id,date,start_time,end_time,department,position,location,notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [d.employeeId, d.date, d.start, d.end, d.department, d.position, d.location, d.notes]
+      );
+    }
+    await client.query('DELETE FROM draft_shifts WHERE date >= $1 AND date <= $2', [from, to]);
+    await client.query('COMMIT');
+    res.json({ published: drafts.length });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Publish error:', err.message);
+    res.status(500).json({ error: 'Failed to publish shifts' });
+  } finally {
+    client.release();
   }
-  const user = MOCK_USERS.find(u => u.id === parseInt(req.params.id));
-  if (!user) return res.status(404).json({ error: 'User not found' });
-  user.role = role;
-  const { password: _pw, ...safe } = user;
-  res.json({ user: safe });
 });
 
 export default router;

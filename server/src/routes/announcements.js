@@ -1,80 +1,114 @@
 import { Router } from 'express';
-import { MOCK_ANNOUNCEMENTS, MOCK_SHIFTS } from '../data/mockData.js';
+import pool from '../db/index.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
 
-// GET /api/announcements?department=Aquatics
-router.get('/', requireAuth, (req, res) => {
+// GET /api/announcements
+router.get('/', requireAuth, async (req, res) => {
   const { department } = req.query;
-  let list = [...MOCK_ANNOUNCEMENTS].sort((a, b) => b.date.localeCompare(a.date));
-  if (department && department !== 'all') {
-    list = list.filter(a => a.department === department);
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, title, body, author_name AS "author", author_avatar AS "authorAvatar",
+              department, priority, date::text
+       FROM announcements
+       ${department && department !== 'all' ? 'WHERE department = $1 OR department IS NULL' : ''}
+       ORDER BY date DESC, created_at DESC`,
+      department && department !== 'all' ? [department] : []
+    );
+    res.json({ announcements: rows });
+  } catch (err) {
+    console.error('Announcements error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch announcements' });
   }
-  res.json({ announcements: list });
 });
 
-// GET /api/announcements/home — employee home dashboard summary
-router.get('/home', requireAuth, (req, res) => {
+// GET /api/announcements/home
+router.get('/home', requireAuth, async (req, res) => {
   const employeeId = req.user.id;
   const today = new Date().toISOString().slice(0, 10);
-
-  const nextShift = MOCK_SHIFTS
-    .filter(s => s.employeeId === employeeId && s.date >= today)
-    .sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
-
-  const upcomingShifts = MOCK_SHIFTS
-    .filter(s => s.employeeId === employeeId && s.date >= today)
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(1, 4);
-
-  const announcements = [...MOCK_ANNOUNCEMENTS]
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 4);
-
-  res.json({ nextShift, upcomingShifts, announcements });
+  try {
+    const [shiftsRes, annsRes] = await Promise.all([
+      pool.query(
+        `SELECT id, employee_id AS "employeeId", date::text, start_time AS start, end_time AS end,
+                department, position, location, notes
+         FROM shifts WHERE employee_id = $1 AND date >= $2
+         ORDER BY date, start_time LIMIT 10`,
+        [employeeId, today]
+      ),
+      pool.query(
+        `SELECT id, title, body, author_name AS "author", author_avatar AS "authorAvatar",
+                department, priority, date::text
+         FROM announcements ORDER BY date DESC, created_at DESC LIMIT 4`
+      ),
+    ]);
+    const allShifts = shiftsRes.rows;
+    res.json({
+      nextShift: allShifts[0] ?? null,
+      upcomingShifts: allShifts.slice(1, 4),
+      announcements: annsRes.rows,
+    });
+  } catch (err) {
+    console.error('Home data error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch home data' });
+  }
 });
 
-// POST /api/announcements — managers and sysadmin
-router.post('/', requireAdmin, (req, res) => {
+// POST /api/announcements
+router.post('/', requireAdmin, async (req, res) => {
   const { title, body, priority = 'normal', department = null } = req.body;
   if (!title?.trim() || !body?.trim()) {
     return res.status(400).json({ error: 'Title and body are required' });
   }
-  const announcement = {
-    id: Date.now(),
-    title: title.trim(),
-    body: body.trim(),
-    author: req.user.name,
-    authorAvatar: req.user.avatar,
-    department: department || null,
-    date: new Date().toISOString().slice(0, 10),
-    priority,
-  };
-  MOCK_ANNOUNCEMENTS.unshift(announcement);
-  res.status(201).json({ announcement });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO announcements (title,body,author_id,author_name,author_avatar,department,priority)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       RETURNING id, title, body, author_name AS "author", author_avatar AS "authorAvatar",
+                 department, priority, date::text`,
+      [title.trim(), body.trim(), req.user.id, req.user.name, req.user.avatar, department || null, priority]
+    );
+    res.status(201).json({ announcement: rows[0] });
+  } catch (err) {
+    console.error('Create announcement error:', err.message);
+    res.status(500).json({ error: 'Failed to create announcement' });
+  }
 });
 
-// PATCH /api/announcements/:id — managers and sysadmin
-router.patch('/:id', requireAdmin, (req, res) => {
-  const id = parseInt(req.params.id);
-  const ann = MOCK_ANNOUNCEMENTS.find(a => a.id === id);
-  if (!ann) return res.status(404).json({ error: 'Announcement not found' });
+// PATCH /api/announcements/:id
+router.patch('/:id', requireAdmin, async (req, res) => {
   const { title, body, priority, department } = req.body;
-  if (title !== undefined) ann.title = title.trim();
-  if (body !== undefined) ann.body = body.trim();
-  if (priority !== undefined) ann.priority = priority;
-  if (department !== undefined) ann.department = department || null;
-  res.json({ announcement: ann });
+  try {
+    const { rows } = await pool.query(
+      `UPDATE announcements SET
+         title      = COALESCE($1, title),
+         body       = COALESCE($2, body),
+         priority   = COALESCE($3, priority),
+         department = CASE WHEN $4::boolean THEN $5 ELSE department END
+       WHERE id = $6
+       RETURNING id, title, body, author_name AS "author", author_avatar AS "authorAvatar",
+                 department, priority, date::text`,
+      [title?.trim() ?? null, body?.trim() ?? null, priority ?? null,
+       department !== undefined, department || null, parseInt(req.params.id)]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Announcement not found' });
+    res.json({ announcement: rows[0] });
+  } catch (err) {
+    console.error('Update announcement error:', err.message);
+    res.status(500).json({ error: 'Failed to update announcement' });
+  }
 });
 
-// DELETE /api/announcements/:id — managers and sysadmin
-router.delete('/:id', requireAdmin, (req, res) => {
-  const id = parseInt(req.params.id);
-  const idx = MOCK_ANNOUNCEMENTS.findIndex(a => a.id === id);
-  if (idx === -1) return res.status(404).json({ error: 'Announcement not found' });
-  MOCK_ANNOUNCEMENTS.splice(idx, 1);
-  res.json({ success: true });
+// DELETE /api/announcements/:id
+router.delete('/:id', requireAdmin, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query('DELETE FROM announcements WHERE id = $1', [parseInt(req.params.id)]);
+    if (!rowCount) return res.status(404).json({ error: 'Announcement not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete announcement error:', err.message);
+    res.status(500).json({ error: 'Failed to delete announcement' });
+  }
 });
 
 export default router;

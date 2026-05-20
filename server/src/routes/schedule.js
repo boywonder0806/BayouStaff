@@ -1,15 +1,18 @@
 import { Router } from 'express';
-import { MOCK_SHIFTS } from '../data/mockData.js';
-import * as netchex from '../services/netchex.js';
+import pool from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
-
-const useNetchex = !!process.env.NETCHEX_API_KEY;
 
 const router = Router();
 
+function getMondayOfCurrentWeek() {
+  const now = new Date();
+  const diff = now.getDay() === 0 ? -6 : 1 - now.getDay();
+  now.setDate(now.getDate() + diff);
+  now.setHours(0, 0, 0, 0);
+  return now;
+}
+
 // GET /api/schedule
-// Query: ?startDate=2026-05-01&endDate=2026-05-31  (any range)
-//        ?weekStart=2026-05-18  (legacy — 7-day window from that Monday)
 router.get('/', requireAuth, async (req, res) => {
   const { startDate, endDate, weekStart } = req.query;
   const employeeId = req.user.id;
@@ -27,35 +30,39 @@ router.get('/', requireAuth, async (req, res) => {
   }
 
   try {
-    const shifts = useNetchex
-      ? await netchex.getShifts(employeeId, startStr, endStr)
-      : MOCK_SHIFTS.filter(s => s.employeeId === employeeId && s.date >= startStr && s.date <= endStr);
-
-    res.json({ startDate: startStr, endDate: endStr, shifts });
+    const { rows } = await pool.query(
+      `SELECT id, employee_id AS "employeeId", date::text, start_time AS start, end_time AS end,
+              department, position, location, notes
+       FROM shifts
+       WHERE employee_id = $1 AND date >= $2 AND date <= $3
+       ORDER BY date, start_time`,
+      [employeeId, startStr, endStr]
+    );
+    res.json({ startDate: startStr, endDate: endStr, shifts: rows });
   } catch (err) {
     console.error('Schedule fetch error:', err.message);
-    res.status(502).json({ error: 'Failed to fetch schedule' });
+    res.status(500).json({ error: 'Failed to fetch schedule' });
   }
 });
 
-// GET /api/schedule/upcoming — next 14 days for the authenticated employee
-router.get('/upcoming', requireAuth, (req, res) => {
+// GET /api/schedule/upcoming
+router.get('/upcoming', requireAuth, async (req, res) => {
   const employeeId = req.user.id;
   const today = new Date().toISOString().slice(0, 10);
-  const shifts = MOCK_SHIFTS
-    .filter(s => s.employeeId === employeeId && s.date >= today)
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(0, 10);
-  res.json({ shifts });
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, employee_id AS "employeeId", date::text, start_time AS start, end_time AS end,
+              department, position, location, notes
+       FROM shifts
+       WHERE employee_id = $1 AND date >= $2
+       ORDER BY date, start_time LIMIT 10`,
+      [employeeId, today]
+    );
+    res.json({ shifts: rows });
+  } catch (err) {
+    console.error('Upcoming shifts error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch upcoming shifts' });
+  }
 });
-
-function getMondayOfCurrentWeek() {
-  const now = new Date();
-  const day = now.getDay(); // 0=Sun
-  const diff = day === 0 ? -6 : 1 - day;
-  now.setDate(now.getDate() + diff);
-  now.setHours(0, 0, 0, 0);
-  return now;
-}
 
 export default router;
