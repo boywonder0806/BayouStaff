@@ -3,8 +3,10 @@ import { format, startOfWeek, addWeeks, subWeeks, parseISO } from 'date-fns';
 import api from '../../../lib/api.js';
 import { fmt12 } from '../../../lib/time.js';
 import { Avatar } from '../../../components/Layout/Sidebar.jsx';
+import { useAuth } from '../../../context/AuthContext.jsx';
 
-const DEPTS     = ['Aquatics', 'Food & Beverage', 'Guest Services', 'Management', 'Cleaning Crew'];
+// Management is a classification only — not a schedulable department
+const SCHEDULABLE_DEPTS = ['Aquatics', 'Food & Beverage', 'Guest Services', 'Cleaning Crew'];
 const LOCS      = ['Wave Pool', 'Slide Area', 'Lazy River', 'Main Pool', 'Park-Wide',
                    'Snack Shack', 'Main Concessions', 'Main Entrance', 'Cabana Rentals'];
 const DAY_LABELS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
@@ -26,6 +28,12 @@ function calcHours(start, end) {
 }
 
 export default function CurrentSchedule() {
+  const { user } = useAuth();
+  // Sysadmins see all depts; managers see only their assigned ones
+  const depts = (!user || user.role === 'sysadmin')
+    ? SCHEDULABLE_DEPTS
+    : SCHEDULABLE_DEPTS.filter(d => user.departments?.includes(d));
+
   const [weekStart, setWeekStart] = useState(() =>
     format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
   );
@@ -217,7 +225,7 @@ export default function CurrentSchedule() {
             )}
             <select value={deptFilter} onChange={e => setDept(e.target.value)} className="field text-sm py-1.5 w-44">
               <option value="All">All Departments</option>
-              {DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
+              {depts.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
           </div>
         </div>
@@ -424,7 +432,7 @@ export default function CurrentSchedule() {
                 <p className="label-xs mb-1.5">Department</p>
                 <select value={modal.form.department} onChange={patch('department')} className="field">
                   <option value="">— Select —</option>
-                  {DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
+                  {depts.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
               <div>

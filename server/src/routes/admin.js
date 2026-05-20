@@ -161,9 +161,9 @@ router.get('/scheduler', requireAdmin, async (req, res) => {
     const [empRes, shiftRes] = await Promise.all([
       depts
         ? pool.query(`SELECT id, email, name, role, department, departments, position, avatar, phone,
-                             hire_date AS "hireDate" FROM employees WHERE is_active = true AND departments && $1::text[] ORDER BY name`, [depts])
+                             hire_date AS "hireDate" FROM employees WHERE is_active = true AND role = 'crew_member' AND departments && $1::text[] ORDER BY name`, [depts])
         : pool.query(`SELECT id, email, name, role, department, departments, position, avatar, phone,
-                             hire_date AS "hireDate" FROM employees WHERE is_active = true ORDER BY name`),
+                             hire_date AS "hireDate" FROM employees WHERE is_active = true AND role = 'crew_member' ORDER BY name`),
       depts
         ? pool.query(`SELECT ${SHIFT_SELECT} FROM shifts WHERE date = ANY($1::date[]) AND department = ANY($2::text[]) ORDER BY date, start_time`, [days, depts])
         : pool.query(`SELECT ${SHIFT_SELECT} FROM shifts WHERE date = ANY($1::date[]) ORDER BY date, start_time`, [days]),
@@ -253,9 +253,9 @@ router.get('/scheduler/plan', requireAdmin, async (req, res) => {
     const [empRes, shiftRes] = await Promise.all([
       depts
         ? pool.query(`SELECT id, email, name, role, department, departments, position, avatar, phone,
-                             hire_date AS "hireDate" FROM employees WHERE is_active = true AND departments && $1::text[] ORDER BY name`, [depts])
+                             hire_date AS "hireDate" FROM employees WHERE is_active = true AND role = 'crew_member' AND departments && $1::text[] ORDER BY name`, [depts])
         : pool.query(`SELECT id, email, name, role, department, departments, position, avatar, phone,
-                             hire_date AS "hireDate" FROM employees WHERE is_active = true ORDER BY name`),
+                             hire_date AS "hireDate" FROM employees WHERE is_active = true AND role = 'crew_member' ORDER BY name`),
       depts
         ? pool.query(`SELECT ${SHIFT_SELECT} FROM draft_shifts WHERE date = ANY($1::date[]) AND department = ANY($2::text[]) ORDER BY date, start_time`, [days, depts])
         : pool.query(`SELECT ${SHIFT_SELECT} FROM draft_shifts WHERE date = ANY($1::date[]) ORDER BY date, start_time`, [days]),

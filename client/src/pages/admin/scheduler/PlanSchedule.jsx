@@ -3,8 +3,10 @@ import { format, startOfWeek, addWeeks, subWeeks, parseISO } from 'date-fns';
 import api from '../../../lib/api.js';
 import { fmt12 } from '../../../lib/time.js';
 import { Avatar } from '../../../components/Layout/Sidebar.jsx';
+import { useAuth } from '../../../context/AuthContext.jsx';
 
-const DEPTS     = ['Aquatics', 'Food & Beverage', 'Guest Services', 'Management', 'Cleaning Crew'];
+// Management is a classification only — not a schedulable department
+const SCHEDULABLE_DEPTS = ['Aquatics', 'Food & Beverage', 'Guest Services', 'Cleaning Crew'];
 const LOCS      = ['Wave Pool', 'Slide Area', 'Lazy River', 'Main Pool', 'Park-Wide',
                    'Snack Shack', 'Main Concessions', 'Main Entrance', 'Cabana Rentals'];
 const DAY_LABELS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
@@ -31,6 +33,12 @@ function nextMonday() {
 }
 
 export default function PlanSchedule() {
+  const { user } = useAuth();
+  // Sysadmins see all depts; managers see only their assigned ones
+  const depts = (!user || user.role === 'sysadmin')
+    ? SCHEDULABLE_DEPTS
+    : SCHEDULABLE_DEPTS.filter(d => user.departments?.includes(d));
+
   const [weekStart, setWeekStart] = useState(nextMonday);
   const [data, setData]         = useState(null);
   const [loading, setLoading]   = useState(true);
@@ -48,13 +56,26 @@ export default function PlanSchedule() {
   const [aiModal, setAiModal]       = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiConfig, setAiConfig]     = useState({
-    departments: ['Aquatics', 'Food & Beverage', 'Guest Services', 'Cleaning Crew'],
+    departments: SCHEDULABLE_DEPTS,
     dailyCoverage: { 'Aquatics': 2, 'Food & Beverage': 2, 'Guest Services': 2, 'Cleaning Crew': 1 },
     minHours: 16,
     maxHours: 40,
     shiftStart: '09:00',
     shiftEnd: '17:00',
   });
+
+  // Sync AI config departments whenever the user's accessible depts change
+  useEffect(() => {
+    setAiConfig(prev => {
+      const filtered = prev.departments.filter(d => depts.includes(d));
+      const next = filtered.length ? filtered : depts;
+      return {
+        ...prev,
+        departments: next,
+        dailyCoverage: Object.fromEntries(next.map(d => [d, prev.dailyCoverage[d] ?? 2])),
+      };
+    });
+  }, [depts.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -271,7 +292,7 @@ export default function PlanSchedule() {
             )}
             <select value={deptFilter} onChange={e => setDept(e.target.value)} className="field text-sm py-1.5 w-44">
               <option value="All">All Departments</option>
-              {DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
+              {depts.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
             <button
               onClick={() => setAiModal(true)}
@@ -478,7 +499,7 @@ export default function PlanSchedule() {
               <div>
                 <p className="label-xs mb-2">Departments to schedule</p>
                 <div className="flex flex-wrap gap-2">
-                  {DEPTS.map(d => {
+                  {depts.map(d => {
                     const on = aiConfig.departments.includes(d);
                     return (
                       <button
@@ -615,7 +636,7 @@ export default function PlanSchedule() {
                 <p className="label-xs mb-1.5">Department</p>
                 <select value={modal.form.department} onChange={patch('department')} className="field">
                   <option value="">— Select —</option>
-                  {DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
+                  {depts.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
               <div>
