@@ -75,7 +75,12 @@ export default function ShiftAssignments() {
 
   // Departments that have shifts this week
   const activeDepts = Object.keys(DEPT_CONFIG).filter(d => shifts.some(s => s.department === d));
-  const tabs = ['All', ...activeDepts];
+  const tabs = activeDepts.length > 1 ? ['All', ...activeDepts] : activeDepts;
+
+  // Auto-select the only dept when there's just one
+  useEffect(() => {
+    if (activeDepts.length === 1) setActiveDept(activeDepts[0]);
+  }, [activeDepts.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const visible = activeDept === 'All' ? shifts : shifts.filter(s => s.department === activeDept);
 

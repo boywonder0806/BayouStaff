@@ -39,6 +39,11 @@ export default function PlanSchedule() {
     ? SCHEDULABLE_DEPTS
     : SCHEDULABLE_DEPTS.filter(d => user.departments?.includes(d));
 
+  // If only one dept is accessible, skip "All" and go straight to it
+  useEffect(() => {
+    if (depts.length === 1) setDept(depts[0]);
+  }, [depts.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [weekStart, setWeekStart] = useState(nextMonday);
   const [data, setData]         = useState(null);
   const [loading, setLoading]   = useState(true);
@@ -291,7 +296,7 @@ export default function PlanSchedule() {
               </span>
             )}
             <select value={deptFilter} onChange={e => setDept(e.target.value)} className="field text-sm py-1.5 w-44">
-              <option value="All">All Departments</option>
+              {depts.length > 1 && <option value="All">All Departments</option>}
               {depts.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
             <button
