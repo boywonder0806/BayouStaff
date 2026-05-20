@@ -471,6 +471,158 @@ router.delete('/departments/roles/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// ── Time Off Requests (Admin) ─────────────────────────────────────────────────
+router.get('/time-off', requireAdmin, async (req, res) => {
+  const depts = managerDepts(req);
+  try {
+    const { rows } = depts
+      ? await pool.query(
+          `SELECT tor.id, tor.employee_id AS "employeeId", e.name AS "employeeName", e.avatar,
+                  tor.start_date::text AS "startDate", tor.end_date::text AS "endDate",
+                  tor.reason, tor.status, tor.review_notes AS "reviewNotes", tor.created_at AS "createdAt"
+           FROM time_off_requests tor JOIN employees e ON e.id = tor.employee_id
+           WHERE e.departments && $1::text[] ORDER BY tor.created_at DESC`,
+          [depts]
+        )
+      : await pool.query(
+          `SELECT tor.id, tor.employee_id AS "employeeId", e.name AS "employeeName", e.avatar,
+                  tor.start_date::text AS "startDate", tor.end_date::text AS "endDate",
+                  tor.reason, tor.status, tor.review_notes AS "reviewNotes", tor.created_at AS "createdAt"
+           FROM time_off_requests tor JOIN employees e ON e.id = tor.employee_id
+           ORDER BY tor.created_at DESC`
+        );
+    res.json({ requests: rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch time off requests' });
+  }
+});
+
+router.patch('/time-off/:id', requireAdmin, async (req, res) => {
+  const { status, reviewNotes } = req.body;
+  if (!['approved', 'denied'].includes(status)) {
+    return res.status(400).json({ error: 'status must be approved or denied' });
+  }
+  try {
+    const { rows } = await pool.query(
+      `UPDATE time_off_requests
+       SET status = $1, review_notes = $2, reviewed_by = $3, reviewed_at = NOW()
+       WHERE id = $4
+       RETURNING id, status, review_notes AS "reviewNotes"`,
+      [status, reviewNotes || null, req.user.id, parseInt(req.params.id)]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Request not found' });
+    res.json({ request: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update request' });
+  }
+});
+
+// ── Open Shifts (Admin) ───────────────────────────────────────────────────────
+router.get('/open-shifts', requireAdmin, async (req, res) => {
+  const depts = managerDepts(req);
+  try {
+    const { rows } = depts
+      ? await pool.query(
+          `SELECT os.id, os.date::text, os.start_time AS start, os.end_time AS end,
+                  os.department, os.position, os.notes,
+                  os.claimed_by AS "claimedBy", e.name AS "claimedByName",
+                  os.created_at AS "createdAt"
+           FROM open_shifts os LEFT JOIN employees e ON e.id = os.claimed_by
+           WHERE os.department = ANY($1::text[]) ORDER BY os.date, os.start_time`,
+          [depts]
+        )
+      : await pool.query(
+          `SELECT os.id, os.date::text, os.start_time AS start, os.end_time AS end,
+                  os.department, os.position, os.notes,
+                  os.claimed_by AS "claimedBy", e.name AS "claimedByName",
+                  os.created_at AS "createdAt"
+           FROM open_shifts os LEFT JOIN employees e ON e.id = os.claimed_by
+           ORDER BY os.date, os.start_time`
+        );
+    res.json({ shifts: rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch open shifts' });
+  }
+});
+
+router.post('/open-shifts', requireAdmin, async (req, res) => {
+  const { date, start, end, department, position, notes } = req.body;
+  if (!date || !start || !end || !department) {
+    return res.status(400).json({ error: 'date, start, end, department are required' });
+  }
+  const depts = managerDepts(req);
+  if (depts && !depts.includes(department)) {
+    return res.status(403).json({ error: 'You do not have access to this department.' });
+  }
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO open_shifts (date, start_time, end_time, department, position, notes, posted_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       RETURNING id, date::text, start_time AS start, end_time AS end,
+                 department, position, notes, created_at AS "createdAt"`,
+      [date, start, end, department, position || null, notes || null, req.user.id]
+    );
+    res.status(201).json({ shift: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to post open shift' });
+  }
+});
+
+router.delete('/open-shifts/:id', requireAdmin, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query(
+      `DELETE FROM open_shifts WHERE id = $1`, [parseInt(req.params.id)]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete open shift' });
+  }
+});
+
+// ── Timecards (Admin) ─────────────────────────────────────────────────────────
+router.get('/timecards', requireAdmin, async (req, res) => {
+  const depts = managerDepts(req);
+  const fromDate = req.query.from || new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+  const toDate   = req.query.to   || new Date().toISOString().slice(0, 10);
+  try {
+    const { rows } = depts
+      ? await pool.query(
+          `SELECT tc.id, tc.employee_id AS "employeeId", e.name AS "employeeName", e.avatar,
+                  tc.clock_in AS "clockIn", tc.clock_out AS "clockOut", tc.date::text, tc.notes, tc.status
+           FROM timecards tc JOIN employees e ON e.id = tc.employee_id
+           WHERE tc.date >= $1 AND tc.date <= $2 AND e.departments && $3::text[]
+           ORDER BY tc.clock_in DESC`,
+          [fromDate, toDate, depts]
+        )
+      : await pool.query(
+          `SELECT tc.id, tc.employee_id AS "employeeId", e.name AS "employeeName", e.avatar,
+                  tc.clock_in AS "clockIn", tc.clock_out AS "clockOut", tc.date::text, tc.notes, tc.status
+           FROM timecards tc JOIN employees e ON e.id = tc.employee_id
+           WHERE tc.date >= $1 AND tc.date <= $2
+           ORDER BY tc.clock_in DESC`,
+          [fromDate, toDate]
+        );
+    res.json({ timecards: rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch timecards' });
+  }
+});
+
+router.patch('/timecards/:id/approve', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE timecards SET status = 'approved', approved_by = $1, approved_at = NOW()
+       WHERE id = $2 RETURNING id, status`,
+      [req.user.id, parseInt(req.params.id)]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Not found' });
+    res.json({ timecard: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to approve timecard' });
+  }
+});
+
 // ── Certifications ────────────────────────────────────────────────────────────
 router.get('/certifications', requireAdmin, async (_req, res) => {
   try {

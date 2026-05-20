@@ -6,10 +6,14 @@ const NAV = [
   { to: '/schedule',      label: 'Schedule', icon: CalIcon       },
   { to: '/messages',      label: 'Messages', icon: MsgIcon       },
   { to: '/announcements', label: 'Board',    icon: BroadcastIcon },
+  { to: '/timeoff',       label: 'T.Off',    icon: TimeOffIcon   },
+  { to: '/shiftboard',    label: 'Shifts',   icon: OpenShiftIcon },
+  { to: '/timecards',     label: 'Clock',    icon: ClockIcon     },
 ];
 const ADMIN_NAV = [
-  { to: '/admin',     label: 'Admin', icon: GridIcon      },
-  { to: '/scheduler', label: 'Sched', icon: SchedulerIcon },
+  { to: '/admin',          label: 'Admin',  icon: GridIcon      },
+  { to: '/scheduler',      label: 'Sched',  icon: SchedulerIcon },
+  { to: '/staff/timeoff',  label: 'Staff',  icon: StaffIcon     },
 ];
 const SYSADMIN_NAV = [
   { to: '/sysadmin/users', label: 'System', icon: ShieldIcon },
@@ -169,6 +173,43 @@ function ShieldIcon() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-full h-full">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
       <polyline points="9 12 11 14 15 10" />
+    </svg>
+  );
+}
+function TimeOffIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-full h-full">
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+      <line x1="8" y1="15" x2="16" y2="15" />
+    </svg>
+  );
+}
+function OpenShiftIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-full h-full">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <line x1="3" y1="9" x2="21" y2="9" />
+      <line x1="9" y1="9" x2="9" y2="21" />
+    </svg>
+  );
+}
+function ClockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-full h-full">
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="12 7 12 12 15 15" />
+    </svg>
+  );
+}
+function StaffIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-full h-full">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </svg>
   );
 }

@@ -94,6 +94,51 @@ CREATE TABLE IF NOT EXISTS department_roles (
 );
 CREATE INDEX IF NOT EXISTS idx_department_roles_dept ON department_roles(department);
 
+CREATE TABLE IF NOT EXISTS time_off_requests (
+  id            SERIAL PRIMARY KEY,
+  employee_id   INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  start_date    DATE NOT NULL,
+  end_date      DATE NOT NULL,
+  reason        TEXT,
+  status        TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'approved' | 'denied'
+  reviewed_by   INTEGER REFERENCES employees(id),
+  reviewed_at   TIMESTAMPTZ,
+  review_notes  TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_tor_employee ON time_off_requests(employee_id);
+CREATE INDEX IF NOT EXISTS idx_tor_status   ON time_off_requests(status);
+
+CREATE TABLE IF NOT EXISTS open_shifts (
+  id          SERIAL PRIMARY KEY,
+  date        DATE NOT NULL,
+  start_time  TIME NOT NULL,
+  end_time    TIME NOT NULL,
+  department  TEXT NOT NULL,
+  position    TEXT,
+  notes       TEXT,
+  claimed_by  INTEGER REFERENCES employees(id),
+  claimed_at  TIMESTAMPTZ,
+  posted_by   INTEGER NOT NULL REFERENCES employees(id),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_open_shifts_date ON open_shifts(date);
+
+CREATE TABLE IF NOT EXISTS timecards (
+  id            SERIAL PRIMARY KEY,
+  employee_id   INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  clock_in      TIMESTAMPTZ NOT NULL,
+  clock_out     TIMESTAMPTZ,
+  date          DATE NOT NULL,
+  notes         TEXT,
+  status        TEXT NOT NULL DEFAULT 'open', -- 'open' | 'closed' | 'approved'
+  approved_by   INTEGER REFERENCES employees(id),
+  approved_at   TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_timecards_employee ON timecards(employee_id, date);
+CREATE INDEX IF NOT EXISTS idx_timecards_date     ON timecards(date);
+
 CREATE TABLE IF NOT EXISTS certifications (
   id          SERIAL PRIMARY KEY,
   name        TEXT NOT NULL UNIQUE,
