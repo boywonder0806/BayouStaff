@@ -330,6 +330,65 @@ router.post('/sysadmin/users', requireSysAdmin, async (req, res) => {
   }
 });
 
+// ── Department Roles ──────────────────────────────────────────────────────────
+router.get('/departments/roles', requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, department, name, sort_order FROM department_roles ORDER BY department, sort_order, id`
+    );
+    res.json({ roles: rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch department roles' });
+  }
+});
+
+router.post('/departments/:dept/roles', requireAdmin, async (req, res) => {
+  const { name } = req.body;
+  const department = decodeURIComponent(req.params.dept);
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO department_roles (department, name, sort_order)
+       VALUES ($1, $2, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM department_roles WHERE department = $1))
+       RETURNING id, department, name, sort_order`,
+      [department, name.trim()]
+    );
+    res.status(201).json({ role: rows[0] });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Position already exists.' });
+    res.status(500).json({ error: 'Failed to add role' });
+  }
+});
+
+router.patch('/departments/roles/:id', requireAdmin, async (req, res) => {
+  const { name } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  try {
+    const { rows } = await pool.query(
+      `UPDATE department_roles SET name = $1 WHERE id = $2 RETURNING id, department, name, sort_order`,
+      [name.trim(), parseInt(req.params.id)]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Role not found' });
+    res.json({ role: rows[0] });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Position already exists.' });
+    res.status(500).json({ error: 'Failed to update role' });
+  }
+});
+
+router.delete('/departments/roles/:id', requireAdmin, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query(
+      `DELETE FROM department_roles WHERE id = $1`, [parseInt(req.params.id)]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'Role not found' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete role' });
+  }
+});
+
+// ── SysAdmin ──────────────────────────────────────────────────────────────────
 router.patch('/sysadmin/users/:id', requireSysAdmin, async (req, res) => {
   const { name, email, role, department, departments, position, phone, isActive } = req.body;
   try {

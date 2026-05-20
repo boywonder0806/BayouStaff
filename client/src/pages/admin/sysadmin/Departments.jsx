@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
+import api from '../../../lib/api.js';
 
-const INITIAL_DEPARTMENTS = [
+const DEPT_META = [
   {
     id: 'aquatics',
     name: 'Aquatics',
@@ -8,15 +9,7 @@ const INITIAL_DEPARTMENTS = [
     barClass: 'bg-aq',
     borderClass: 'border-aq/40',
     bgClass: 'bg-aq/10',
-    dotColor: '#00C8FF',
     description: 'Pool and water attraction safety and operations. Staff are responsible for guest safety across all aquatic areas.',
-    subRoles: [
-      { id: 1, name: 'Shallow Water Lifeguard' },
-      { id: 2, name: 'Deep Water Lifeguard' },
-      { id: 3, name: 'Slide Attendant' },
-      { id: 4, name: 'Lazy River Attendant' },
-      { id: 5, name: 'Pool Supervisor' },
-    ],
   },
   {
     id: 'guest_services',
@@ -25,15 +18,7 @@ const INITIAL_DEPARTMENTS = [
     barClass: 'bg-gs',
     borderClass: 'border-gs/40',
     bgClass: 'bg-gs/10',
-    dotColor: '#B455FF',
     description: 'Guest experience, ticketing, and park entry operations. First point of contact for all park visitors.',
-    subRoles: [
-      { id: 6,  name: 'Cashier' },
-      { id: 7,  name: 'Ticket Scanner' },
-      { id: 8,  name: 'Greeter' },
-      { id: 9,  name: 'Information Desk' },
-      { id: 10, name: 'Cabana Rental' },
-    ],
   },
   {
     id: 'food_beverage',
@@ -42,15 +27,7 @@ const INITIAL_DEPARTMENTS = [
     barClass: 'bg-fb',
     borderClass: 'border-fb/40',
     bgClass: 'bg-fb/10',
-    dotColor: '#FF7A00',
     description: 'Food stands, concessions, and beverage service throughout the park.',
-    subRoles: [
-      { id: 11, name: 'Cashier' },
-      { id: 12, name: 'Cook' },
-      { id: 13, name: 'Team Member' },
-      { id: 14, name: 'Shift Lead' },
-      { id: 15, name: 'Inventory' },
-    ],
   },
   {
     id: 'cleaning_crew',
@@ -59,14 +36,7 @@ const INITIAL_DEPARTMENTS = [
     barClass: 'bg-cc',
     borderClass: 'border-cc/40',
     bgClass: 'bg-cc/10',
-    dotColor: '#2DDE98',
     description: 'Park-wide cleanliness, sanitation, and waste management to ensure a safe and welcoming environment.',
-    subRoles: [
-      { id: 16, name: 'General Cleaning' },
-      { id: 17, name: 'Pool Deck' },
-      { id: 18, name: 'Restrooms' },
-      { id: 19, name: 'Trash & Waste' },
-    ],
   },
   {
     id: 'management',
@@ -75,49 +45,81 @@ const INITIAL_DEPARTMENTS = [
     barClass: 'bg-mgmt',
     borderClass: 'border-mgmt/40',
     bgClass: 'bg-mgmt/10',
-    dotColor: '#FFD200',
     description: 'Park leadership, operations oversight, and cross-departmental coordination.',
-    subRoles: [
-      { id: 20, name: 'Shift Manager' },
-      { id: 21, name: 'Assistant Manager' },
-      { id: 22, name: 'Park Director' },
-    ],
   },
 ];
 
-let nextId = 100;
-
 export default function SysAdminDepartments() {
-  const [departments, setDepartments] = useState(INITIAL_DEPARTMENTS);
-  const [selectedId, setSelectedId]   = useState('aquatics');
+  const [rolesByDept, setRolesByDept]   = useState({});
+  const [descriptions, setDescriptions] = useState(
+    Object.fromEntries(DEPT_META.map(d => [d.id, d.description]))
+  );
+  const [selectedId, setSelectedId] = useState('aquatics');
+  const [loading, setLoading]       = useState(true);
+
+  useEffect(() => {
+    api.get('/admin/departments/roles')
+      .then(r => {
+        const grouped = {};
+        for (const role of r.data.roles) {
+          if (!grouped[role.department]) grouped[role.department] = [];
+          grouped[role.department].push(role);
+        }
+        setRolesByDept(grouped);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const departments = DEPT_META.map(meta => ({
+    ...meta,
+    description: descriptions[meta.id],
+    subRoles: rolesByDept[meta.name] || [],
+  }));
 
   const dept = departments.find(d => d.id === selectedId);
 
-  function updateDept(id, patch) {
-    setDepartments(prev => prev.map(d => d.id === id ? { ...d, ...patch } : d));
-  }
-
-  function addSubRole(deptId, name) {
+  async function addSubRole(deptName, name) {
     const trimmed = name.trim();
     if (!trimmed) return;
-    updateDept(deptId, {
-      subRoles: [...(departments.find(d => d.id === deptId)?.subRoles ?? []), { id: nextId++, name: trimmed }],
-    });
+    try {
+      const { data } = await api.post(`/admin/departments/${encodeURIComponent(deptName)}/roles`, { name: trimmed });
+      setRolesByDept(prev => ({
+        ...prev,
+        [deptName]: [...(prev[deptName] || []), data.role],
+      }));
+    } catch (err) {
+      console.error(err);
+    }
   }
 
-  function renameSubRole(deptId, roleId, name) {
+  async function renameSubRole(deptName, roleId, name) {
     const trimmed = name.trim();
     if (!trimmed) return;
-    updateDept(deptId, {
-      subRoles: departments.find(d => d.id === deptId)?.subRoles.map(r => r.id === roleId ? { ...r, name: trimmed } : r) ?? [],
-    });
+    try {
+      const { data } = await api.patch(`/admin/departments/roles/${roleId}`, { name: trimmed });
+      setRolesByDept(prev => ({
+        ...prev,
+        [deptName]: prev[deptName].map(r => r.id === roleId ? data.role : r),
+      }));
+    } catch (err) {
+      console.error(err);
+    }
   }
 
-  function deleteSubRole(deptId, roleId) {
-    updateDept(deptId, {
-      subRoles: departments.find(d => d.id === deptId)?.subRoles.filter(r => r.id !== roleId) ?? [],
-    });
+  async function deleteSubRole(deptName, roleId) {
+    try {
+      await api.delete(`/admin/departments/roles/${roleId}`);
+      setRolesByDept(prev => ({
+        ...prev,
+        [deptName]: prev[deptName].filter(r => r.id !== roleId),
+      }));
+    } catch (err) {
+      console.error(err);
+    }
   }
+
+  const totalPositions = Object.values(rolesByDept).reduce((n, arr) => n + arr.length, 0);
 
   return (
     <div className="flex flex-col gap-5" style={{ height: 'calc(100vh - 3rem)' }}>
@@ -131,7 +133,10 @@ export default function SysAdminDepartments() {
           </h1>
         </div>
         <div className="flex items-center gap-2 pb-1">
-          <span className="text-10 text-fog">{departments.length} departments · {departments.reduce((n, d) => n + d.subRoles.length, 0)} positions</span>
+          {loading
+            ? <span className="text-10 text-fog">Loading…</span>
+            : <span className="text-10 text-fog">{DEPT_META.length} departments · {totalPositions} positions</span>
+          }
         </div>
       </div>
 
@@ -181,13 +186,13 @@ export default function SysAdminDepartments() {
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-1">
                   <h2 className={`font-heading font-black text-2xl leading-none ${dept.colorClass}`}>{dept.name}</h2>
-                  <span className={`text-10 font-bold tracking-widests uppercase px-2 py-0.5 rounded-full border ${dept.bgClass} ${dept.borderClass} ${dept.colorClass}`}>
+                  <span className={`text-10 font-bold tracking-widest uppercase px-2 py-0.5 rounded-full border ${dept.bgClass} ${dept.borderClass} ${dept.colorClass}`}>
                     {dept.subRoles.length} positions
                   </span>
                 </div>
                 <DescriptionEditor
                   value={dept.description}
-                  onChange={val => updateDept(dept.id, { description: val })}
+                  onChange={val => setDescriptions(prev => ({ ...prev, [dept.id]: val }))}
                 />
               </div>
             </div>
@@ -196,29 +201,31 @@ export default function SysAdminDepartments() {
             <div className="flex-1">
               <div className="flex items-center justify-between mb-3">
                 <p className="label-xs">Positions / Sub-Roles</p>
-                <p className="text-10 text-fog">Click any position to rename · drag to reorder</p>
+                <p className="text-10 text-fog">Click any position to rename</p>
               </div>
 
-              <div className="space-y-2 mb-4">
-                {dept.subRoles.map((role, idx) => (
-                  <SubRoleRow
-                    key={role.id}
-                    role={role}
-                    index={idx + 1}
-                    dept={dept}
-                    onRename={name => renameSubRole(dept.id, role.id, name)}
-                    onDelete={() => deleteSubRole(dept.id, role.id)}
-                  />
-                ))}
-                {dept.subRoles.length === 0 && (
-                  <p className="text-fog text-sm py-4 text-center">No positions yet — add one below.</p>
-                )}
-              </div>
-
-              <AddRoleInput
-                dept={dept}
-                onAdd={name => addSubRole(dept.id, name)}
-              />
+              {loading ? (
+                <p className="text-fog text-sm py-4 text-center">Loading positions…</p>
+              ) : (
+                <>
+                  <div className="space-y-2 mb-4">
+                    {dept.subRoles.map((role, idx) => (
+                      <SubRoleRow
+                        key={role.id}
+                        role={role}
+                        index={idx + 1}
+                        dept={dept}
+                        onRename={name => renameSubRole(dept.name, role.id, name)}
+                        onDelete={() => deleteSubRole(dept.name, role.id)}
+                      />
+                    ))}
+                    {dept.subRoles.length === 0 && (
+                      <p className="text-fog text-sm py-4 text-center">No positions yet — add one below.</p>
+                    )}
+                  </div>
+                  <AddRoleInput dept={dept} onAdd={name => addSubRole(dept.name, name)} />
+                </>
+              )}
             </div>
           </div>
         )}
@@ -260,7 +267,10 @@ function DescriptionEditor({ value, onChange }) {
       value={draft}
       onChange={e => setDraft(e.target.value)}
       onBlur={commit}
-      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); } if (e.key === 'Escape') { setDraft(value); setEditing(false); } }}
+      onKeyDown={e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); }
+        if (e.key === 'Escape') { setDraft(value); setEditing(false); }
+      }}
       autoFocus
     />
   );
@@ -285,10 +295,8 @@ function SubRoleRow({ role, index, dept, onRename, onDelete }) {
     <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all group
       ${editing ? `${dept.bgClass} ${dept.borderClass}` : 'bg-shell/40 border-rim/40 hover:border-rim/70 hover:bg-shell/60'}`}
     >
-      {/* Index */}
       <span className="text-10 text-fog font-mono w-5 text-center shrink-0">{String(index).padStart(2, '0')}</span>
 
-      {/* Name */}
       {editing ? (
         <input
           ref={inputRef}
@@ -310,7 +318,6 @@ function SubRoleRow({ role, index, dept, onRename, onDelete }) {
         </button>
       )}
 
-      {/* Actions */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
         {!editing && (
           <button

@@ -83,3 +83,12 @@ CREATE INDEX IF NOT EXISTS idx_shifts_date                ON shifts(date);
 CREATE INDEX IF NOT EXISTS idx_draft_shifts_date          ON draft_shifts(date);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation      ON messages(conversation_id, sent_at);
 CREATE INDEX IF NOT EXISTS idx_announcements_date         ON announcements(date DESC);
+
+CREATE TABLE IF NOT EXISTS department_roles (
+  id          SERIAL PRIMARY KEY,
+  department  TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  sort_order  INT  NOT NULL DEFAULT 0,
+  UNIQUE (department, name)
+);
+CREATE INDEX IF NOT EXISTS idx_department_roles_dept ON department_roles(department);
