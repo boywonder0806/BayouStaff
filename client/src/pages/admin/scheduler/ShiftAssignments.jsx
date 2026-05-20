@@ -42,7 +42,7 @@ export default function ShiftAssignments() {
   const [showAutoModal, setShowAutoModal] = useState(false);
   const [aiGenerating, setAiGenerating]   = useState(false);
   const [aiConfig, setAiConfig] = useState({
-    departments: availableDepts,
+    departments: SCHEDULABLE_DEPTS,
     minHours: 16,
     maxHours: 40,
     shiftStart: '09:00',
@@ -195,7 +195,10 @@ export default function ShiftAssignments() {
               </span>
             )}
             <button
-              onClick={() => setShowAutoModal(true)}
+              onClick={() => {
+                setAiConfig(c => ({ ...c, departments: availableDepts }));
+                setShowAutoModal(true);
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all bg-violet-500/15 border-violet-500/40 text-violet-300 hover:bg-violet-500/25"
             >
               <SparkleIcon />
