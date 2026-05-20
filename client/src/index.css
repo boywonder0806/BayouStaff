@@ -15,6 +15,9 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: #1E4568; border-radius: 9999px; }
 
+  .scrollbar-none { scrollbar-width: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+
   @keyframes wave-flow {
     from { transform: translateX(0); }
     to   { transform: translateX(-50%); }

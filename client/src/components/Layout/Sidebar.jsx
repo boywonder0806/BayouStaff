@@ -38,7 +38,7 @@ export default function Sidebar() {
       </div>
 
       {/* Nav items */}
-      <nav className="flex-1 flex flex-col items-center py-4 gap-1">
+      <nav className="flex-1 min-h-0 flex flex-col items-center py-4 gap-1 overflow-y-auto scrollbar-none">
         {items.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
