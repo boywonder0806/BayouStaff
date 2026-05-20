@@ -10,15 +10,20 @@ router.get('/conversations', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT c.id, c.name, c.type,
-              (SELECT text FROM messages m WHERE m.conversation_id = c.id ORDER BY sent_at DESC LIMIT 1) AS "lastMessage",
-              (SELECT sent_at FROM messages m WHERE m.conversation_id = c.id ORDER BY sent_at DESC LIMIT 1) AS "lastMessageTime",
-              JSON_AGG(JSON_BUILD_OBJECT('id', e.id, 'name', e.name, 'avatar', e.avatar)) AS "memberDetails"
+              m.text AS "lastMessage", m.sent_at AS "lastMessageTime",
+              json_agg(json_build_object('id', e.id, 'name', e.name, 'avatar', e.avatar)
+                ORDER BY e.name) AS "memberDetails"
        FROM conversations c
-       JOIN conversation_members cm ON cm.conversation_id = c.id
-       JOIN conversation_members my ON my.conversation_id = c.id AND my.employee_id = $1
-       JOIN employees e ON e.id = cm.employee_id
-       GROUP BY c.id
-       ORDER BY "lastMessageTime" DESC NULLS LAST`,
+       JOIN conversation_members cm  ON cm.conversation_id  = c.id
+       JOIN conversation_members cm2 ON cm2.conversation_id = c.id
+       JOIN employees e ON e.id = cm2.employee_id
+       LEFT JOIN LATERAL (
+         SELECT text, sent_at FROM messages
+         WHERE conversation_id = c.id ORDER BY sent_at DESC LIMIT 1
+       ) m ON true
+       WHERE cm.employee_id = $1
+       GROUP BY c.id, c.name, c.type, m.text, m.sent_at
+       ORDER BY m.sent_at DESC NULLS LAST`,
       [userId]
     );
     res.json({ conversations: rows });
@@ -31,34 +36,24 @@ router.get('/conversations', requireAuth, async (req, res) => {
 // GET /api/messages/conversations/:id
 router.get('/conversations/:id', requireAuth, async (req, res) => {
   const convoId = parseInt(req.params.id);
-  const userId = req.user.id;
+  const userId  = req.user.id;
   try {
-    const memberCheck = await pool.query(
-      'SELECT 1 FROM conversation_members WHERE conversation_id=$1 AND employee_id=$2',
+    const { rows: [convo] } = await pool.query(
+      `SELECT c.id, c.name, c.type FROM conversations c
+       JOIN conversation_members cm ON cm.conversation_id = c.id
+       WHERE c.id = $1 AND cm.employee_id = $2`,
       [convoId, userId]
     );
-    if (!memberCheck.rowCount) return res.status(404).json({ error: 'Conversation not found' });
+    if (!convo) return res.status(404).json({ error: 'Conversation not found' });
 
-    const [convoRes, msgsRes] = await Promise.all([
-      pool.query(
-        `SELECT c.id, c.name, c.type,
-                JSON_AGG(JSON_BUILD_OBJECT('id', e.id, 'name', e.name, 'avatar', e.avatar)) AS "memberDetails"
-         FROM conversations c
-         JOIN conversation_members cm ON cm.conversation_id = c.id
-         JOIN employees e ON e.id = cm.employee_id
-         WHERE c.id = $1 GROUP BY c.id`,
-        [convoId]
-      ),
-      pool.query(
-        `SELECT m.id, m.sender_id AS "senderId", e.name AS "senderName", e.avatar AS "senderAvatar",
-                m.text, m.sent_at AS time
-         FROM messages m JOIN employees e ON e.id = m.sender_id
-         WHERE m.conversation_id = $1 ORDER BY m.sent_at ASC`,
-        [convoId]
-      ),
-    ]);
-
-    res.json({ conversation: convoRes.rows[0], messages: msgsRes.rows });
+    const { rows: messages } = await pool.query(
+      `SELECT m.id, m.sender_id AS "senderId", m.text, m.sent_at AS time,
+              e.name AS "senderName", e.avatar AS "senderAvatar"
+       FROM messages m JOIN employees e ON e.id = m.sender_id
+       WHERE m.conversation_id = $1 ORDER BY m.sent_at ASC`,
+      [convoId]
+    );
+    res.json({ conversation: convo, messages });
   } catch (err) {
     console.error('Messages error:', err.message);
     res.status(500).json({ error: 'Failed to fetch messages' });
@@ -68,31 +63,26 @@ router.get('/conversations/:id', requireAuth, async (req, res) => {
 // POST /api/messages/conversations/:id
 router.post('/conversations/:id', requireAuth, async (req, res) => {
   const convoId = parseInt(req.params.id);
-  const userId = req.user.id;
+  const userId  = req.user.id;
   const { text } = req.body;
   if (!text?.trim()) return res.status(400).json({ error: 'Message text required' });
 
   try {
-    const memberCheck = await pool.query(
-      'SELECT 1 FROM conversation_members WHERE conversation_id=$1 AND employee_id=$2',
+    const { rows: [member] } = await pool.query(
+      `SELECT 1 FROM conversation_members WHERE conversation_id = $1 AND employee_id = $2`,
       [convoId, userId]
     );
-    if (!memberCheck.rowCount) return res.status(404).json({ error: 'Conversation not found' });
+    if (!member) return res.status(404).json({ error: 'Conversation not found' });
 
-    const { rows } = await pool.query(
+    const { rows: [msg] } = await pool.query(
       `INSERT INTO messages (conversation_id, sender_id, text)
        VALUES ($1, $2, $3)
        RETURNING id, sender_id AS "senderId", text, sent_at AS time`,
       [convoId, userId, text.trim()]
     );
-    const msg = rows[0];
-    res.status(201).json({
-      message: {
-        ...msg,
-        senderName: req.user.name,
-        senderAvatar: req.user.avatar,
-      },
-    });
+    msg.senderName   = req.user.name;
+    msg.senderAvatar = req.user.avatar;
+    res.status(201).json({ message: msg });
   } catch (err) {
     console.error('Send message error:', err.message);
     res.status(500).json({ error: 'Failed to send message' });
