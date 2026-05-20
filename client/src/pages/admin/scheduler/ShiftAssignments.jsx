@@ -39,6 +39,15 @@ export default function ShiftAssignments() {
   const [loading, setLoading]         = useState(true);
   const [assigning, setAssigning]     = useState(null);
   const [saving, setSaving]           = useState(new Set());
+  const [showAutoModal, setShowAutoModal] = useState(false);
+  const [aiGenerating, setAiGenerating]   = useState(false);
+  const [aiConfig, setAiConfig] = useState({
+    departments: availableDepts,
+    minHours: 16,
+    maxHours: 40,
+    shiftStart: '09:00',
+    shiftEnd: '17:00',
+  });
 
   const availableDepts = (!user || user.role === 'sysadmin')
     ? SCHEDULABLE_DEPTS
@@ -133,6 +142,29 @@ export default function ShiftAssignments() {
     }
   }
 
+  async function handleAutoSchedule() {
+    if (!aiConfig.departments.length) return;
+    setAiGenerating(true);
+    try {
+      const { data } = await api.post('/admin/scheduler/auto-schedule', {
+        weekStart,
+        ...aiConfig,
+      });
+      // Merge the newly generated draft shifts into state
+      const newShifts = (data.shifts || []).map(s => ({ ...s, _source: 'draft' }));
+      setShifts(prev => {
+        const existingIds = new Set(prev.map(s => `${s._source}-${s.id}`));
+        const fresh = newShifts.filter(s => !existingIds.has(`draft-${s.id}`));
+        return [...prev, ...fresh];
+      });
+      setShowAutoModal(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAiGenerating(false);
+    }
+  }
+
   const today = new Date().toISOString().slice(0, 10);
 
   const underStaffedCells = positions.reduce((sum, p) =>
@@ -162,6 +194,13 @@ export default function ShiftAssignments() {
                 Fully staffed
               </span>
             )}
+            <button
+              onClick={() => setShowAutoModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all bg-violet-500/15 border-violet-500/40 text-violet-300 hover:bg-violet-500/25"
+            >
+              <SparkleIcon />
+              Auto-Schedule
+            </button>
             <div className="flex items-center gap-1">
               <button
                 onClick={prevWeek}
@@ -346,6 +385,131 @@ export default function ShiftAssignments() {
         )}
       </div>
 
+      {/* Auto-Schedule modal */}
+      {showAutoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !aiGenerating && setShowAutoModal(false)} />
+          <div className="relative bg-deep border border-rim/60 rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden">
+
+            <div className="flex items-center justify-between px-6 py-4 border-b border-rim/40">
+              <div>
+                <h2 className="font-heading font-bold text-ink text-lg flex items-center gap-2">
+                  <span className="text-violet-400">✦</span> Auto-Schedule
+                </h2>
+                <p className="text-fog text-xs mt-0.5">
+                  AI will fill every position slot for{' '}
+                  <span className="text-amber-400 font-semibold">
+                    {format(parseISO(weekStart), 'MMM d')} – {format(weekEnd, 'MMM d, yyyy')}
+                  </span>
+                </p>
+              </div>
+              {!aiGenerating && (
+                <button onClick={() => setShowAutoModal(false)} className="text-fog hover:text-ink transition-colors text-2xl leading-none">×</button>
+              )}
+            </div>
+
+            <div className="px-6 py-5 space-y-5 max-h-[65vh] overflow-y-auto">
+
+              {/* Departments */}
+              <div>
+                <p className="label-xs mb-2">Departments to schedule</p>
+                <div className="flex flex-wrap gap-2">
+                  {availableDepts.map(d => {
+                    const on = aiConfig.departments.includes(d);
+                    const dcfg = DEPT_CONFIG[d];
+                    return (
+                      <button
+                        key={d}
+                        onClick={() => setAiConfig(c => ({
+                          ...c,
+                          departments: on ? c.departments.filter(x => x !== d) : [...c.departments, d]
+                        }))}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors
+                          ${on
+                            ? `${dcfg.bg} ${dcfg.border} ${dcfg.color}`
+                            : 'border-rim/40 text-fog hover:border-rim'
+                          }`}
+                      >
+                        {d}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Hours range */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="label-xs mb-1.5">Min hours / employee</p>
+                  <input
+                    type="number" min={8} max={40}
+                    value={aiConfig.minHours}
+                    onChange={e => setAiConfig(c => ({ ...c, minHours: parseInt(e.target.value) || 16 }))}
+                    className="field text-sm"
+                  />
+                </div>
+                <div>
+                  <p className="label-xs mb-1.5">Max hours / employee</p>
+                  <input
+                    type="number" min={8} max={60}
+                    value={aiConfig.maxHours}
+                    onChange={e => setAiConfig(c => ({ ...c, maxHours: parseInt(e.target.value) || 40 }))}
+                    className="field text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Default shift times */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="label-xs mb-1.5">Default shift start</p>
+                  <input type="time" className="field text-sm" value={aiConfig.shiftStart}
+                    onChange={e => setAiConfig(c => ({ ...c, shiftStart: e.target.value }))} />
+                </div>
+                <div>
+                  <p className="label-xs mb-1.5">Default shift end</p>
+                  <input type="time" className="field text-sm" value={aiConfig.shiftEnd}
+                    onChange={e => setAiConfig(c => ({ ...c, shiftEnd: e.target.value }))} />
+                </div>
+              </div>
+
+              {aiGenerating && (
+                <div className="flex items-center gap-3 py-2">
+                  <div className="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                  <span className="text-sm text-violet-300">Claude is building your schedule…</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-rim/40">
+              <button
+                onClick={() => setShowAutoModal(false)}
+                disabled={aiGenerating}
+                className="btn-ghost text-xs px-4 py-1.5 disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAutoSchedule}
+                disabled={aiGenerating || aiConfig.departments.length === 0}
+                className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-all
+                  bg-violet-500/20 text-violet-300 border border-violet-500/40
+                  hover:bg-violet-500/30 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {aiGenerating ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                    Generating…
+                  </>
+                ) : (
+                  <>✦ Generate Schedule</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Assignment modal */}
       {assigning && (
         <AssignModal
@@ -456,6 +620,13 @@ function AssignModal({ positionName, date, dept, employees, alreadyAssigned, onA
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
+function SparkleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3">
+      <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
+    </svg>
+  );
+}
 function ChevronLeftIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
