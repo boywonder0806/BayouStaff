@@ -90,6 +90,9 @@ CREATE TABLE IF NOT EXISTS department_roles (
   name        TEXT NOT NULL,
   type        TEXT NOT NULL DEFAULT 'position', -- 'role' | 'position'
   sort_order  INT  NOT NULL DEFAULT 0,
+  description TEXT,
+  min_count   INT  NOT NULL DEFAULT 1,
+  max_count   INT  NOT NULL DEFAULT 1,
   UNIQUE (department, type, name)
 );
 CREATE INDEX IF NOT EXISTS idx_department_roles_dept ON department_roles(department);

@@ -59,9 +59,34 @@ router.post('/', requireAdmin, async (req, res) => {
       [days]
     );
 
+    // Fetch positions with min/max counts for these departments
+    const { rows: positions } = await pool.query(
+      `SELECT department, name, description, min_count AS "minCount", max_count AS "maxCount"
+       FROM department_roles
+       WHERE type = 'position' AND department = ANY($1::text[])
+       ORDER BY department, sort_order`,
+      [departments]
+    );
+
     const existingMap = existing.map(s => `${s.employee_id} on ${s.date}`).join(', ') || 'none';
 
-    const coverage = departments.map(d => `${d}: ${dailyCoverage[d] ?? 2} staff/day`).join('\n');
+    // Build per-department position requirements
+    const positionsByDept = {};
+    for (const p of positions) {
+      if (!positionsByDept[p.department]) positionsByDept[p.department] = [];
+      positionsByDept[p.department].push(p);
+    }
+
+    const coverageLines = departments.map(d => {
+      const deptPositions = positionsByDept[d];
+      if (deptPositions?.length) {
+        const posLines = deptPositions.map(p =>
+          `    - ${p.name}: min ${p.minCount}, max ${p.maxCount} per day${p.description ? ` (${p.description})` : ''}`
+        ).join('\n');
+        return `${d}:\n${posLines}`;
+      }
+      return `${d}: ${dailyCoverage[d] ?? 2} staff/day (no positions defined)`;
+    }).join('\n');
 
     const prompt = `You are a professional waterpark scheduler. Generate a weekly shift schedule as a JSON array.
 
@@ -70,8 +95,8 @@ WEEK: ${days[0]} to ${days[6]} (Mon–Sun)
 EMPLOYEES:
 ${employees.map(e => `- ID ${e.id}: ${e.name}, departments: ${(e.departments || [e.department]).join(', ')}, position: ${e.position}`).join('\n')}
 
-COVERAGE REQUIREMENTS (per day):
-${coverage}
+POSITION REQUIREMENTS (fill each day):
+${coverageLines}
 
 CONSTRAINTS:
 - Each employee works ${minHours}–${maxHours} hours this week
@@ -79,6 +104,8 @@ CONSTRAINTS:
 - Max 5 working days per employee
 - Only assign employees to departments listed in their departments array
 - Spread shifts across the week — avoid giving everyone the same days off
+- Aim to meet the minimum count for every position each day; do not exceed the maximum
+- Use the exact position names listed above when filling the "position" field
 - Existing draft shifts already scheduled (do not duplicate): ${existingMap}
 
 Return ONLY a valid JSON array with this exact shape, no explanation:
@@ -89,7 +116,7 @@ Return ONLY a valid JSON array with this exact shape, no explanation:
     "start": "09:00",
     "end": "17:00",
     "department": "Aquatics",
-    "position": "Lifeguard",
+    "position": "Tower 1 Lifeguard",
     "location": "",
     "notes": ""
   }

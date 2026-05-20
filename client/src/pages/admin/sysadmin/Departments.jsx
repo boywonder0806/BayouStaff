@@ -66,11 +66,7 @@ export default function SysAdminDepartments() {
 
   const departments = DEPT_META.map(meta => {
     const positions = allEntries.filter(e => e.department === meta.name);
-    return {
-      ...meta,
-      description: descriptions[meta.id],
-      positions,
-    };
+    return { ...meta, description: descriptions[meta.id], positions };
   });
 
   const dept = departments.find(d => d.id === selectedId);
@@ -79,18 +75,19 @@ export default function SysAdminDepartments() {
     const trimmed = name.trim();
     if (!trimmed) return;
     try {
-      const { data } = await api.post(`/admin/departments/${encodeURIComponent(deptName)}/roles`, { name: trimmed, type: 'position' });
+      const { data } = await api.post(
+        `/admin/departments/${encodeURIComponent(deptName)}/roles`,
+        { name: trimmed, type: 'position', minCount: 1, maxCount: 1 }
+      );
       setAllEntries(prev => [...prev, data.role]);
     } catch (err) {
       console.error(err);
     }
   }
 
-  async function renameEntry(id, name) {
-    const trimmed = name.trim();
-    if (!trimmed) return;
+  async function updateEntry(id, fields) {
     try {
-      const { data } = await api.patch(`/admin/departments/roles/${id}`, { name: trimmed });
+      const { data } = await api.patch(`/admin/departments/roles/${id}`, fields);
       setAllEntries(prev => prev.map(e => e.id === id ? data.role : e));
     } catch (err) {
       console.error(err);
@@ -106,8 +103,6 @@ export default function SysAdminDepartments() {
     }
   }
 
-  const totalPositions = allEntries.length;
-
   return (
     <div className="flex flex-col gap-5" style={{ height: 'calc(100vh - 3rem)' }}>
 
@@ -119,13 +114,9 @@ export default function SysAdminDepartments() {
             Departments
           </h1>
         </div>
-        <div className="flex items-center gap-3 pb-1">
-          {loading ? (
-            <span className="text-10 text-fog">Loading…</span>
-          ) : (
-            <span className="text-10 text-fog">{totalPositions} positions</span>
-          )}
-        </div>
+        {!loading && (
+          <span className="text-10 text-fog pb-1">{allEntries.length} positions</span>
+        )}
       </div>
 
       <div className="flex-1 grid grid-cols-3 gap-5 min-h-0">
@@ -164,7 +155,7 @@ export default function SysAdminDepartments() {
           })}
         </div>
 
-        {/* Right — department config (spans 2 cols) */}
+        {/* Right — department config */}
         {dept && (
           <div className="col-span-2 panel p-6 flex flex-col gap-6 min-h-0 overflow-y-auto">
 
@@ -172,9 +163,7 @@ export default function SysAdminDepartments() {
             <div className="flex items-start gap-4">
               <div className={`w-1 self-stretch rounded-full ${dept.barClass} shrink-0`} />
               <div className="flex-1">
-                <div className="flex items-center gap-3 mb-1">
-                  <h2 className={`font-heading font-black text-2xl leading-none ${dept.colorClass}`}>{dept.name}</h2>
-                </div>
+                <h2 className={`font-heading font-black text-2xl leading-none mb-1 ${dept.colorClass}`}>{dept.name}</h2>
                 <DescriptionEditor
                   value={dept.description}
                   onChange={val => setDescriptions(prev => ({ ...prev, [dept.id]: val }))}
@@ -185,15 +174,36 @@ export default function SysAdminDepartments() {
             {loading ? (
               <p className="text-fog text-sm py-4 text-center">Loading…</p>
             ) : (
-              <EntrySection
-                label="Positions"
-                sublabel="Specific spots assigned on a shift (Tower 1, Grill Station, Main Gate…)"
-                entries={dept.positions}
-                dept={dept}
-                onAdd={name => addPosition(dept.name, name)}
-                onRename={(id, name) => renameEntry(id, name)}
-                onDelete={id => deleteEntry(id)}
-              />
+              <div className="flex flex-col gap-3">
+
+                {/* Column headers */}
+                {dept.positions.length > 0 && (
+                  <div className="grid grid-cols-[2rem_1fr_5rem_5rem_2.5rem] gap-2 px-4 items-center">
+                    <span />
+                    <span className="text-10 text-fog uppercase tracking-widest">Position</span>
+                    <span className="text-10 text-fog uppercase tracking-widest text-center">Min</span>
+                    <span className="text-10 text-fog uppercase tracking-widest text-center">Max</span>
+                    <span />
+                  </div>
+                )}
+
+                {dept.positions.map((entry, idx) => (
+                  <EntryRow
+                    key={entry.id}
+                    entry={entry}
+                    index={idx + 1}
+                    dept={dept}
+                    onUpdate={fields => updateEntry(entry.id, fields)}
+                    onDelete={() => deleteEntry(entry.id)}
+                  />
+                ))}
+
+                {dept.positions.length === 0 && (
+                  <p className="text-fog text-sm py-3 text-center">No positions yet — add one below.</p>
+                )}
+
+                <AddEntryInput dept={dept} onAdd={name => addPosition(dept.name, name)} />
+              </div>
             )}
           </div>
         )}
@@ -202,96 +212,144 @@ export default function SysAdminDepartments() {
   );
 }
 
-// ── Entry section ─────────────────────────────────────────────────────────────
-function EntrySection({ label, sublabel, entries, dept, onAdd, onRename, onDelete }) {
-  return (
-    <div>
-      <div className="flex items-end justify-between mb-3">
-        <div>
-          <p className="label-xs">{label}</p>
-          <p className="text-10 text-fog mt-0.5">{sublabel}</p>
-        </div>
-        <span className={`text-10 font-bold px-2 py-0.5 rounded-full border ${dept.bgClass} ${dept.borderClass} ${dept.colorClass}`}>
-          {entries.length}
-        </span>
-      </div>
-
-      <div className="space-y-2 mb-3">
-        {entries.map((entry, idx) => (
-          <EntryRow
-            key={entry.id}
-            entry={entry}
-            index={idx + 1}
-            dept={dept}
-            onRename={name => onRename(entry.id, name)}
-            onDelete={() => onDelete(entry.id)}
-          />
-        ))}
-        {entries.length === 0 && (
-          <p className="text-fog text-sm py-3 text-center">No positions yet — add one below.</p>
-        )}
-      </div>
-
-      <AddEntryInput dept={dept} onAdd={onAdd} />
-    </div>
-  );
-}
-
 // ── Entry row ─────────────────────────────────────────────────────────────────
-function EntryRow({ entry, index, dept, onRename, onDelete }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft]     = useState(entry.name);
-  const inputRef = useRef(null);
+function EntryRow({ entry, index, dept, onUpdate, onDelete }) {
+  const [editing, setEditing]     = useState(false);
+  const [name, setName]           = useState(entry.name);
+  const [description, setDesc]    = useState(entry.description ?? '');
+  const [minCount, setMin]        = useState(entry.minCount ?? 1);
+  const [maxCount, setMax]        = useState(entry.maxCount ?? 1);
+  const nameRef = useRef(null);
 
-  useEffect(() => { setDraft(entry.name); }, [entry.name]);
-  useEffect(() => { if (editing) inputRef.current?.select(); }, [editing]);
+  useEffect(() => {
+    setName(entry.name);
+    setDesc(entry.description ?? '');
+    setMin(entry.minCount ?? 1);
+    setMax(entry.maxCount ?? 1);
+  }, [entry]);
+
+  useEffect(() => { if (editing) nameRef.current?.focus(); }, [editing]);
 
   function commit() {
-    if (draft.trim() && draft.trim() !== entry.name) onRename(draft.trim());
-    else setDraft(entry.name);
+    const trimmed = name.trim();
+    if (!trimmed) { setName(entry.name); setEditing(false); return; }
+    const safeMin = Math.max(1, parseInt(minCount) || 1);
+    const safeMax = Math.max(safeMin, parseInt(maxCount) || 1);
+    onUpdate({ name: trimmed, description: description.trim() || null, minCount: safeMin, maxCount: safeMax });
     setEditing(false);
   }
 
+  function cancel() {
+    setName(entry.name);
+    setDesc(entry.description ?? '');
+    setMin(entry.minCount ?? 1);
+    setMax(entry.maxCount ?? 1);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className={`rounded-xl border px-4 py-4 flex flex-col gap-3 ${dept.bgClass} ${dept.borderClass}`}>
+        <div className="flex items-center gap-2">
+          <span className="text-10 text-fog font-mono w-5 text-center shrink-0">{String(index).padStart(2, '0')}</span>
+          <input
+            ref={nameRef}
+            className="flex-1 bg-transparent text-sm font-semibold text-ink outline-none border-b border-current/40 pb-0.5"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Escape') cancel(); }}
+            placeholder="Position name"
+          />
+        </div>
+
+        <div className="pl-7 flex flex-col gap-2">
+          <textarea
+            className="field text-xs resize-none w-full"
+            rows={2}
+            placeholder="Description — what does this position do? (used by auto-schedule)"
+            value={description}
+            onChange={e => setDesc(e.target.value)}
+          />
+
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-10 text-fog uppercase tracking-widest whitespace-nowrap">Min per shift</label>
+              <input
+                type="number" min={1} max={99}
+                className="field text-sm w-16 text-center"
+                value={minCount}
+                onChange={e => {
+                  const v = Math.max(1, parseInt(e.target.value) || 1);
+                  setMin(v);
+                  if (maxCount < v) setMax(v);
+                }}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-10 text-fog uppercase tracking-widest whitespace-nowrap">Max per shift</label>
+              <input
+                type="number" min={minCount} max={99}
+                className="field text-sm w-16 text-center"
+                value={maxCount}
+                onChange={e => setMax(Math.max(minCount, parseInt(e.target.value) || minCount))}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-end pt-1">
+            <button onClick={cancel} className="btn-ghost text-xs px-3 py-1.5">Cancel</button>
+            <button onClick={commit} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${dept.bgClass} ${dept.borderClass} ${dept.colorClass} hover:opacity-80`}>
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all group
-      ${editing ? `${dept.bgClass} ${dept.borderClass}` : 'bg-shell/40 border-rim/40 hover:border-rim/70 hover:bg-shell/60'}`}
+    <div
+      className="grid grid-cols-[2rem_1fr_5rem_5rem_2.5rem] gap-2 px-4 py-3 rounded-xl border items-start transition-all group
+        bg-shell/40 border-rim/40 hover:border-rim/70 hover:bg-shell/60"
     >
-      <span className="text-10 text-fog font-mono w-5 text-center shrink-0">{String(index).padStart(2, '0')}</span>
+      <span className="text-10 text-fog font-mono text-center pt-0.5 shrink-0">{String(index).padStart(2, '0')}</span>
 
-      {editing ? (
-        <input
-          ref={inputRef}
-          className="flex-1 bg-transparent text-sm font-semibold text-ink outline-none border-b border-current pb-0.5"
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={e => {
-            if (e.key === 'Enter') commit();
-            if (e.key === 'Escape') { setDraft(entry.name); setEditing(false); }
-          }}
-        />
-      ) : (
-        <button
-          className="flex-1 text-sm font-semibold text-ink text-left hover:text-fog-hi transition-colors"
-          onClick={() => setEditing(true)}
-        >
-          {entry.name}
-        </button>
-      )}
-
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-        {!editing && (
-          <button
-            onClick={() => setEditing(true)}
-            className="p-1.5 rounded-md text-fog hover:text-fog-hi hover:bg-shell transition-colors"
-            title="Rename"
-          >
-            <PencilIcon />
-          </button>
+      <button
+        className="text-left"
+        onClick={() => setEditing(true)}
+      >
+        <p className="text-sm font-semibold text-ink leading-snug">{entry.name}</p>
+        {entry.description && (
+          <p className="text-10 text-fog mt-0.5 leading-relaxed">{entry.description}</p>
         )}
+        {!entry.description && (
+          <p className="text-10 text-fog/40 mt-0.5 italic opacity-0 group-hover:opacity-100 transition-opacity">
+            Add description…
+          </p>
+        )}
+      </button>
+
+      <div className="flex flex-col items-center gap-0.5">
+        <span className="text-sm font-bold text-ink tabular-nums">{entry.minCount ?? 1}</span>
+        <span className="text-10 text-fog/50">min</span>
+      </div>
+
+      <div className="flex flex-col items-center gap-0.5">
+        <span className="text-sm font-bold text-ink tabular-nums">{entry.maxCount ?? 1}</span>
+        <span className="text-10 text-fog/50">max</span>
+      </div>
+
+      <div className="flex flex-col items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pt-0.5">
+        <button
+          onClick={() => setEditing(true)}
+          className="p-1 rounded-md text-fog hover:text-fog-hi hover:bg-shell transition-colors"
+          title="Edit"
+        >
+          <PencilIcon />
+        </button>
         <button
           onClick={onDelete}
-          className="p-1.5 rounded-md text-fog hover:text-red-400 hover:bg-red-500/10 transition-colors"
+          className="p-1 rounded-md text-fog hover:text-red-400 hover:bg-red-500/10 transition-colors"
           title="Delete"
         >
           <TrashIcon />
@@ -312,7 +370,7 @@ function AddEntryInput({ dept, onAdd }) {
   }
 
   return (
-    <div className={`flex gap-2 p-3 rounded-xl border border-dashed ${dept.borderClass} ${dept.bgClass}/30`}>
+    <div className={`flex gap-2 p-3 rounded-xl border border-dashed ${dept.borderClass} ${dept.bgClass}/30 mt-1`}>
       <input
         className="flex-1 bg-transparent text-sm text-ink placeholder-fog outline-none"
         placeholder={`Add a position to ${dept.name}…`}
