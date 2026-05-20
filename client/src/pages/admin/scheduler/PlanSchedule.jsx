@@ -45,6 +45,16 @@ export default function PlanSchedule() {
   const [dropTarget, setDropTarget] = useState(null);
   const [clipboard, setClipboard]   = useState(null);
   const [ctxMenu, setCtxMenu]       = useState(null);
+  const [aiModal, setAiModal]       = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiConfig, setAiConfig]     = useState({
+    departments: ['Aquatics', 'Food & Beverage', 'Guest Services', 'Cleaning Crew'],
+    dailyCoverage: { 'Aquatics': 2, 'Food & Beverage': 2, 'Guest Services': 2, 'Cleaning Crew': 1 },
+    minHours: 16,
+    maxHours: 40,
+    shiftStart: '09:00',
+    shiftEnd: '17:00',
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -118,6 +128,18 @@ export default function PlanSchedule() {
     } catch {
       showToast('Publish failed. Please try again.', 'error');
     } finally { setPublishing(false); }
+  }
+
+  async function handleAutoSchedule() {
+    setAiGenerating(true);
+    try {
+      const res = await api.post('/admin/scheduler/auto-schedule', { weekStart, ...aiConfig });
+      setAiModal(false);
+      showToast(`✓ Generated ${res.data.generated} shifts for the week.`);
+      load();
+    } catch (e) {
+      showToast(e.response?.data?.error ?? 'Auto-schedule failed. Try again.', 'error');
+    } finally { setAiGenerating(false); }
   }
 
   // ── Drag-and-drop ────────────────────────────────────────────────────────────
@@ -251,6 +273,14 @@ export default function PlanSchedule() {
               <option value="All">All Departments</option>
               {DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
+            <button
+              onClick={() => setAiModal(true)}
+              className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all
+                bg-violet-500/20 text-violet-300 border border-violet-500/40
+                hover:bg-violet-500/30"
+            >
+              ✦ Auto-Schedule
+            </button>
             <button
               onClick={handlePublish}
               disabled={publishing || shifts.length === 0}
@@ -418,6 +448,130 @@ export default function PlanSchedule() {
               />
             </>
           )}
+        </div>
+      )}
+
+      {/* ── AI Auto-Schedule modal ── */}
+      {aiModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !aiGenerating && setAiModal(false)} />
+          <div className="relative panel-raised w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-rim/40">
+              <div>
+                <h2 className="font-heading font-bold text-ink text-lg flex items-center gap-2">
+                  <span className="text-violet-400">✦</span> Auto-Schedule
+                </h2>
+                <p className="text-fog text-xs mt-0.5">
+                  AI will generate draft shifts for{' '}
+                  <span className="text-amber-400 font-semibold">
+                    {days.length ? `${format(parseISO(days[0]), 'MMM d')} – ${format(parseISO(days[6]), 'MMM d')}` : 'this week'}
+                  </span>
+                </p>
+              </div>
+              {!aiGenerating && (
+                <button onClick={() => setAiModal(false)} className="text-fog hover:text-ink transition-colors text-2xl leading-none">×</button>
+              )}
+            </div>
+            <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+
+              {/* Departments */}
+              <div>
+                <p className="label-xs mb-2">Departments to schedule</p>
+                <div className="flex flex-wrap gap-2">
+                  {DEPTS.map(d => {
+                    const on = aiConfig.departments.includes(d);
+                    return (
+                      <button
+                        key={d}
+                        onClick={() => setAiConfig(c => ({
+                          ...c,
+                          departments: on ? c.departments.filter(x => x !== d) : [...c.departments, d]
+                        }))}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors
+                          ${on ? 'bg-violet-500/20 border-violet-500/50 text-violet-300' : 'border-rim/40 text-fog hover:border-rim'}`}
+                      >
+                        {d}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Coverage per dept */}
+              <div>
+                <p className="label-xs mb-2">Staff needed per day (per department)</p>
+                <div className="space-y-2">
+                  {aiConfig.departments.map(d => (
+                    <div key={d} className="flex items-center justify-between">
+                      <span className="text-sm text-fog-hi">{d}</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setAiConfig(c => ({ ...c, dailyCoverage: { ...c.dailyCoverage, [d]: Math.max(1, (c.dailyCoverage[d] ?? 2) - 1) } }))}
+                          className="w-6 h-6 rounded bg-shell text-ink font-bold flex items-center justify-center hover:bg-shell/80"
+                        >−</button>
+                        <span className="w-6 text-center text-sm font-semibold text-ink">{aiConfig.dailyCoverage[d] ?? 2}</span>
+                        <button
+                          onClick={() => setAiConfig(c => ({ ...c, dailyCoverage: { ...c.dailyCoverage, [d]: (c.dailyCoverage[d] ?? 2) + 1 } }))}
+                          className="w-6 h-6 rounded bg-shell text-ink font-bold flex items-center justify-center hover:bg-shell/80"
+                        >+</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Hours range */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="label-xs mb-1.5">Min hours / employee</p>
+                  <input type="number" min={8} max={40} value={aiConfig.minHours}
+                    onChange={e => setAiConfig(c => ({ ...c, minHours: parseInt(e.target.value) }))}
+                    className="field" />
+                </div>
+                <div>
+                  <p className="label-xs mb-1.5">Max hours / employee</p>
+                  <input type="number" min={8} max={60} value={aiConfig.maxHours}
+                    onChange={e => setAiConfig(c => ({ ...c, maxHours: parseInt(e.target.value) }))}
+                    className="field" />
+                </div>
+              </div>
+
+              {/* Default shift times */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="label-xs mb-1.5">Default shift start</p>
+                  <input type="time" value={aiConfig.shiftStart}
+                    onChange={e => setAiConfig(c => ({ ...c, shiftStart: e.target.value }))}
+                    className="field" />
+                </div>
+                <div>
+                  <p className="label-xs mb-1.5">Default shift end</p>
+                  <input type="time" value={aiConfig.shiftEnd}
+                    onChange={e => setAiConfig(c => ({ ...c, shiftEnd: e.target.value }))}
+                    className="field" />
+                </div>
+              </div>
+
+              {aiGenerating && (
+                <div className="flex items-center gap-3 py-2">
+                  <div className="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-sm text-violet-300">Claude is building your schedule…</span>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-rim/40">
+              <button onClick={() => setAiModal(false)} disabled={aiGenerating} className="btn-ghost border border-rim/60 disabled:opacity-40">Cancel</button>
+              <button
+                onClick={handleAutoSchedule}
+                disabled={aiGenerating || aiConfig.departments.length === 0}
+                className="px-5 py-2 rounded-lg text-sm font-semibold transition-all
+                  bg-violet-500/20 text-violet-300 border border-violet-500/40
+                  hover:bg-violet-500/30 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {aiGenerating ? 'Generating…' : '✦ Generate Schedule'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
