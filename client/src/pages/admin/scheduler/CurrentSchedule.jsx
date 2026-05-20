@@ -227,7 +227,7 @@ export default function CurrentSchedule() {
           {loading ? (
             <div className="flex items-center justify-center h-48 text-fog text-sm">Loading schedule…</div>
           ) : (
-            <table className="w-full border-collapse" style={{ minWidth: 860 }}>
+            <table className="w-full border-collapse table-fixed">
               <thead>
                 <tr>
                   <th className="sticky left-0 top-0 z-20 bg-deep border-b border-r border-rim/40 px-4 py-2 text-left w-44">
@@ -259,7 +259,7 @@ export default function CurrentSchedule() {
                         key={day}
                         className={`sticky top-0 z-10 border-b border-r border-rim/40 px-3 py-2 text-center
                           ${isToday ? 'bg-cyan/10' : 'bg-deep'}`}
-                        style={{ minWidth: 120 }}
+                        style={{  }}
                       >
                         <p className={`label-xs ${isToday ? 'text-cyan' : 'text-fog'}`}>{DAY_LABELS[i]}</p>
                         <p className={`font-heading font-bold text-2xl leading-none mt-0.5 ${isToday ? 'text-cyan' : 'text-ink'}`}>
