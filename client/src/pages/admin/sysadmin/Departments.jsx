@@ -50,7 +50,7 @@ const DEPT_META = [
 ];
 
 export default function SysAdminDepartments() {
-  const [rolesByDept, setRolesByDept]   = useState({});
+  const [allEntries, setAllEntries]     = useState([]);
   const [descriptions, setDescriptions] = useState(
     Object.fromEntries(DEPT_META.map(d => [d.id, d.description]))
   );
@@ -59,67 +59,57 @@ export default function SysAdminDepartments() {
 
   useEffect(() => {
     api.get('/admin/departments/roles')
-      .then(r => {
-        const grouped = {};
-        for (const role of r.data.roles) {
-          if (!grouped[role.department]) grouped[role.department] = [];
-          grouped[role.department].push(role);
-        }
-        setRolesByDept(grouped);
-      })
+      .then(r => setAllEntries(r.data.roles))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
-  const departments = DEPT_META.map(meta => ({
-    ...meta,
-    description: descriptions[meta.id],
-    subRoles: rolesByDept[meta.name] || [],
-  }));
+  // Build departments with roles and positions split
+  const departments = DEPT_META.map(meta => {
+    const entries = allEntries.filter(e => e.department === meta.name);
+    return {
+      ...meta,
+      description: descriptions[meta.id],
+      roles:     entries.filter(e => e.type === 'role'),
+      positions: entries.filter(e => e.type === 'position'),
+    };
+  });
 
   const dept = departments.find(d => d.id === selectedId);
 
-  async function addSubRole(deptName, name) {
+  async function addEntry(deptName, name, type) {
     const trimmed = name.trim();
     if (!trimmed) return;
     try {
-      const { data } = await api.post(`/admin/departments/${encodeURIComponent(deptName)}/roles`, { name: trimmed });
-      setRolesByDept(prev => ({
-        ...prev,
-        [deptName]: [...(prev[deptName] || []), data.role],
-      }));
+      const { data } = await api.post(`/admin/departments/${encodeURIComponent(deptName)}/roles`, { name: trimmed, type });
+      setAllEntries(prev => [...prev, data.role]);
     } catch (err) {
       console.error(err);
     }
   }
 
-  async function renameSubRole(deptName, roleId, name) {
+  async function renameEntry(id, name) {
     const trimmed = name.trim();
     if (!trimmed) return;
     try {
-      const { data } = await api.patch(`/admin/departments/roles/${roleId}`, { name: trimmed });
-      setRolesByDept(prev => ({
-        ...prev,
-        [deptName]: prev[deptName].map(r => r.id === roleId ? data.role : r),
-      }));
+      const { data } = await api.patch(`/admin/departments/roles/${id}`, { name: trimmed });
+      setAllEntries(prev => prev.map(e => e.id === id ? data.role : e));
     } catch (err) {
       console.error(err);
     }
   }
 
-  async function deleteSubRole(deptName, roleId) {
+  async function deleteEntry(id) {
     try {
-      await api.delete(`/admin/departments/roles/${roleId}`);
-      setRolesByDept(prev => ({
-        ...prev,
-        [deptName]: prev[deptName].filter(r => r.id !== roleId),
-      }));
+      await api.delete(`/admin/departments/roles/${id}`);
+      setAllEntries(prev => prev.filter(e => e.id !== id));
     } catch (err) {
       console.error(err);
     }
   }
 
-  const totalPositions = Object.values(rolesByDept).reduce((n, arr) => n + arr.length, 0);
+  const totalRoles     = allEntries.filter(e => e.type === 'role').length;
+  const totalPositions = allEntries.filter(e => e.type === 'position').length;
 
   return (
     <div className="flex flex-col gap-5" style={{ height: 'calc(100vh - 3rem)' }}>
@@ -132,11 +122,16 @@ export default function SysAdminDepartments() {
             Departments
           </h1>
         </div>
-        <div className="flex items-center gap-2 pb-1">
-          {loading
-            ? <span className="text-10 text-fog">Loading…</span>
-            : <span className="text-10 text-fog">{DEPT_META.length} departments · {totalPositions} positions</span>
-          }
+        <div className="flex items-center gap-3 pb-1">
+          {loading ? (
+            <span className="text-10 text-fog">Loading…</span>
+          ) : (
+            <>
+              <span className="text-10 text-fog">{totalRoles} roles</span>
+              <span className="text-rim/60">·</span>
+              <span className="text-10 text-fog">{totalPositions} positions</span>
+            </>
+          )}
         </div>
       </div>
 
@@ -157,18 +152,22 @@ export default function SysAdminDepartments() {
                   }`}
               >
                 {isActive && <div className={`absolute left-0 top-0 bottom-0 w-0.5 ${d.barClass}`} />}
-                <div className="flex items-center justify-between mb-1 pl-1">
+                <div className="flex items-center justify-between pl-1 mb-1.5">
                   <span className={`text-sm font-bold ${isActive ? d.colorClass : 'text-ink'}`}>{d.name}</span>
-                  <span className="text-10 text-fog">{d.subRoles.length} positions</span>
+                  <div className="flex items-center gap-1.5 text-10 text-fog">
+                    <span>{d.roles.length}R</span>
+                    <span className="opacity-40">·</span>
+                    <span>{d.positions.length}P</span>
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-1 pl-1 mt-2">
-                  {d.subRoles.slice(0, 3).map(r => (
+                <div className="flex flex-wrap gap-1 pl-1">
+                  {d.roles.slice(0, 3).map(r => (
                     <span key={r.id} className="text-10 text-fog bg-shell/60 border border-rim/40 rounded px-1.5 py-0.5">
                       {r.name}
                     </span>
                   ))}
-                  {d.subRoles.length > 3 && (
-                    <span className="text-10 text-fog">+{d.subRoles.length - 3} more</span>
+                  {d.roles.length > 3 && (
+                    <span className="text-10 text-fog">+{d.roles.length - 3}</span>
                   )}
                 </div>
               </button>
@@ -186,9 +185,6 @@ export default function SysAdminDepartments() {
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-1">
                   <h2 className={`font-heading font-black text-2xl leading-none ${dept.colorClass}`}>{dept.name}</h2>
-                  <span className={`text-10 font-bold tracking-widest uppercase px-2 py-0.5 rounded-full border ${dept.bgClass} ${dept.borderClass} ${dept.colorClass}`}>
-                    {dept.subRoles.length} positions
-                  </span>
                 </div>
                 <DescriptionEditor
                   value={dept.description}
@@ -197,39 +193,184 @@ export default function SysAdminDepartments() {
               </div>
             </div>
 
-            {/* Sub-roles */}
-            <div className="flex-1">
-              <div className="flex items-center justify-between mb-3">
-                <p className="label-xs">Positions / Sub-Roles</p>
-                <p className="text-10 text-fog">Click any position to rename</p>
-              </div>
+            {loading ? (
+              <p className="text-fog text-sm py-4 text-center">Loading…</p>
+            ) : (
+              <div className="flex flex-col gap-6">
 
-              {loading ? (
-                <p className="text-fog text-sm py-4 text-center">Loading positions…</p>
-              ) : (
-                <>
-                  <div className="space-y-2 mb-4">
-                    {dept.subRoles.map((role, idx) => (
-                      <SubRoleRow
-                        key={role.id}
-                        role={role}
-                        index={idx + 1}
-                        dept={dept}
-                        onRename={name => renameSubRole(dept.name, role.id, name)}
-                        onDelete={() => deleteSubRole(dept.name, role.id)}
-                      />
-                    ))}
-                    {dept.subRoles.length === 0 && (
-                      <p className="text-fog text-sm py-4 text-center">No positions yet — add one below.</p>
-                    )}
-                  </div>
-                  <AddRoleInput dept={dept} onAdd={name => addSubRole(dept.name, name)} />
-                </>
-              )}
-            </div>
+                {/* ── Roles ── */}
+                <EntrySection
+                  label="Roles"
+                  sublabel="Job titles — what a person is in this department"
+                  entries={dept.roles}
+                  dept={dept}
+                  type="role"
+                  onAdd={name => addEntry(dept.name, name, 'role')}
+                  onRename={(id, name) => renameEntry(id, name)}
+                  onDelete={id => deleteEntry(id)}
+                />
+
+                {/* Divider */}
+                <div className="border-t border-rim/30" />
+
+                {/* ── Positions ── */}
+                <EntrySection
+                  label="Positions"
+                  sublabel="Specific spots assigned on a shift (Tower 1, Grill Station, Main Gate…)"
+                  entries={dept.positions}
+                  dept={dept}
+                  type="position"
+                  onAdd={name => addEntry(dept.name, name, 'position')}
+                  onRename={(id, name) => renameEntry(id, name)}
+                  onDelete={id => deleteEntry(id)}
+                />
+
+              </div>
+            )}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Entry section (shared by Roles and Positions) ────────────────────────────
+function EntrySection({ label, sublabel, entries, dept, type, onAdd, onRename, onDelete }) {
+  return (
+    <div>
+      <div className="flex items-end justify-between mb-3">
+        <div>
+          <p className="label-xs">{label}</p>
+          <p className="text-10 text-fog mt-0.5">{sublabel}</p>
+        </div>
+        <span className={`text-10 font-bold px-2 py-0.5 rounded-full border ${dept.bgClass} ${dept.borderClass} ${dept.colorClass}`}>
+          {entries.length}
+        </span>
+      </div>
+
+      <div className="space-y-2 mb-3">
+        {entries.map((entry, idx) => (
+          <EntryRow
+            key={entry.id}
+            entry={entry}
+            index={idx + 1}
+            dept={dept}
+            onRename={name => onRename(entry.id, name)}
+            onDelete={() => onDelete(entry.id)}
+          />
+        ))}
+        {entries.length === 0 && (
+          <p className="text-fog text-sm py-3 text-center">No {label.toLowerCase()} yet — add one below.</p>
+        )}
+      </div>
+
+      <AddEntryInput
+        dept={dept}
+        type={type}
+        onAdd={onAdd}
+      />
+    </div>
+  );
+}
+
+// ── Entry row ─────────────────────────────────────────────────────────────────
+function EntryRow({ entry, index, dept, onRename, onDelete }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft]     = useState(entry.name);
+  const inputRef = useRef(null);
+
+  useEffect(() => { setDraft(entry.name); }, [entry.name]);
+  useEffect(() => { if (editing) inputRef.current?.select(); }, [editing]);
+
+  function commit() {
+    if (draft.trim() && draft.trim() !== entry.name) onRename(draft.trim());
+    else setDraft(entry.name);
+    setEditing(false);
+  }
+
+  return (
+    <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all group
+      ${editing ? `${dept.bgClass} ${dept.borderClass}` : 'bg-shell/40 border-rim/40 hover:border-rim/70 hover:bg-shell/60'}`}
+    >
+      <span className="text-10 text-fog font-mono w-5 text-center shrink-0">{String(index).padStart(2, '0')}</span>
+
+      {editing ? (
+        <input
+          ref={inputRef}
+          className="flex-1 bg-transparent text-sm font-semibold text-ink outline-none border-b border-current pb-0.5"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={e => {
+            if (e.key === 'Enter') commit();
+            if (e.key === 'Escape') { setDraft(entry.name); setEditing(false); }
+          }}
+        />
+      ) : (
+        <button
+          className="flex-1 text-sm font-semibold text-ink text-left hover:text-fog-hi transition-colors"
+          onClick={() => setEditing(true)}
+        >
+          {entry.name}
+        </button>
+      )}
+
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        {!editing && (
+          <button
+            onClick={() => setEditing(true)}
+            className="p-1.5 rounded-md text-fog hover:text-fog-hi hover:bg-shell transition-colors"
+            title="Rename"
+          >
+            <PencilIcon />
+          </button>
+        )}
+        <button
+          onClick={onDelete}
+          className="p-1.5 rounded-md text-fog hover:text-red-400 hover:bg-red-500/10 transition-colors"
+          title="Delete"
+        >
+          <TrashIcon />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Add entry input ───────────────────────────────────────────────────────────
+function AddEntryInput({ dept, type, onAdd }) {
+  const [value, setValue] = useState('');
+
+  const placeholder = type === 'role'
+    ? `Add a role to ${dept.name}…`
+    : `Add a position to ${dept.name}…`;
+
+  function submit() {
+    if (!value.trim()) return;
+    onAdd(value);
+    setValue('');
+  }
+
+  return (
+    <div className={`flex gap-2 p-3 rounded-xl border border-dashed ${dept.borderClass} ${dept.bgClass}/30`}>
+      <input
+        className="flex-1 bg-transparent text-sm text-ink placeholder-fog outline-none"
+        placeholder={placeholder}
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') submit(); }}
+      />
+      <button
+        onClick={submit}
+        disabled={!value.trim()}
+        className={`px-4 py-1.5 rounded-lg text-xs font-bold tracking-wide border transition-all
+          ${value.trim()
+            ? `${dept.bgClass} ${dept.borderClass} ${dept.colorClass} hover:opacity-80`
+            : 'border-rim/40 text-fog cursor-not-allowed opacity-50'
+          }`}
+      >
+        Add
+      </button>
     </div>
   );
 }
@@ -238,7 +379,6 @@ export default function SysAdminDepartments() {
 function DescriptionEditor({ value, onChange }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft]     = useState(value);
-  const ref = useRef(null);
 
   useEffect(() => { setDraft(value); }, [value]);
 
@@ -261,7 +401,6 @@ function DescriptionEditor({ value, onChange }) {
 
   return (
     <textarea
-      ref={ref}
       className="field text-sm w-full resize-none leading-relaxed"
       rows={2}
       value={draft}
@@ -273,104 +412,6 @@ function DescriptionEditor({ value, onChange }) {
       }}
       autoFocus
     />
-  );
-}
-
-// ── Sub-role row ─────────────────────────────────────────────────────────────
-function SubRoleRow({ role, index, dept, onRename, onDelete }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft]     = useState(role.name);
-  const inputRef = useRef(null);
-
-  useEffect(() => { setDraft(role.name); }, [role.name]);
-  useEffect(() => { if (editing) inputRef.current?.select(); }, [editing]);
-
-  function commit() {
-    if (draft.trim() && draft.trim() !== role.name) onRename(draft.trim());
-    else setDraft(role.name);
-    setEditing(false);
-  }
-
-  return (
-    <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all group
-      ${editing ? `${dept.bgClass} ${dept.borderClass}` : 'bg-shell/40 border-rim/40 hover:border-rim/70 hover:bg-shell/60'}`}
-    >
-      <span className="text-10 text-fog font-mono w-5 text-center shrink-0">{String(index).padStart(2, '0')}</span>
-
-      {editing ? (
-        <input
-          ref={inputRef}
-          className="flex-1 bg-transparent text-sm font-semibold text-ink outline-none border-b border-current pb-0.5"
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={e => {
-            if (e.key === 'Enter') commit();
-            if (e.key === 'Escape') { setDraft(role.name); setEditing(false); }
-          }}
-        />
-      ) : (
-        <button
-          className="flex-1 text-sm font-semibold text-ink text-left hover:text-fog-hi transition-colors"
-          onClick={() => setEditing(true)}
-        >
-          {role.name}
-        </button>
-      )}
-
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-        {!editing && (
-          <button
-            onClick={() => setEditing(true)}
-            className="p-1.5 rounded-md text-fog hover:text-fog-hi hover:bg-shell transition-colors"
-            title="Rename"
-          >
-            <PencilIcon />
-          </button>
-        )}
-        <button
-          onClick={onDelete}
-          className="p-1.5 rounded-md text-fog hover:text-red-400 hover:bg-red-500/10 transition-colors"
-          title="Remove position"
-        >
-          <TrashIcon />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── Add role input ────────────────────────────────────────────────────────────
-function AddRoleInput({ dept, onAdd }) {
-  const [value, setValue] = useState('');
-
-  function submit() {
-    if (!value.trim()) return;
-    onAdd(value);
-    setValue('');
-  }
-
-  return (
-    <div className={`flex gap-2 p-3 rounded-xl border border-dashed ${dept.borderClass} ${dept.bgClass}/30`}>
-      <input
-        className="flex-1 bg-transparent text-sm text-ink placeholder-fog outline-none"
-        placeholder={`Add a position to ${dept.name}…`}
-        value={value}
-        onChange={e => setValue(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') submit(); }}
-      />
-      <button
-        onClick={submit}
-        disabled={!value.trim()}
-        className={`px-4 py-1.5 rounded-lg text-xs font-bold tracking-wide border transition-all
-          ${value.trim()
-            ? `${dept.bgClass} ${dept.borderClass} ${dept.colorClass} hover:opacity-80`
-            : 'border-rim/40 text-fog cursor-not-allowed opacity-50'
-          }`}
-      >
-        Add
-      </button>
-    </div>
   );
 }
 

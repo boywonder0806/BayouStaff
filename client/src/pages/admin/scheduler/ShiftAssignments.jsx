@@ -36,8 +36,10 @@ export default function ShiftAssignments() {
       .then(([planRes, rolesRes]) => {
         setEmployees(planRes.data.employees);
         setShifts(planRes.data.shifts);
+        // Only keep type='position' entries for the assignment dropdown
         const grouped = {};
         for (const r of rolesRes.data.roles) {
+          if (r.type !== 'position') continue;
           if (!grouped[r.department]) grouped[r.department] = [];
           grouped[r.department].push(r);
         }
@@ -176,7 +178,7 @@ export default function ShiftAssignments() {
         {!loading && visible.length === 0 && (
           <div className="panel flex flex-col items-center justify-center h-40 gap-2">
             <p className="text-fog text-sm">No draft shifts for this week.</p>
-            <p className="text-fog/60 text-xs">Use Plan Schedule or Auto-Schedule to generate shifts first, then come back here to assign positions.</p>
+            <p className="text-fog/60 text-xs">Use Plan Schedule or Auto-Schedule to generate shifts first. Configure positions in SysAdmin → Departments.</p>
           </div>
         )}
 
@@ -233,7 +235,11 @@ export default function ShiftAssignments() {
                               </div>
                               <div className="min-w-0">
                                 <p className="font-semibold text-ink truncate">{emp?.name || 'Unknown'}</p>
-                                <p className="text-10 text-fog truncate">{emp?.position || '—'}</p>
+                                {emp?.position && (
+                                  <span className="inline-block text-10 font-bold text-fog bg-shell/60 border border-rim/40 rounded px-1.5 py-0.5 mt-0.5">
+                                    {emp.position}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </td>
@@ -321,7 +327,7 @@ function PositionSelect({ value, roles, saving, onChange }) {
           </button>
 
           {roles.length === 0 ? (
-            <p className="text-10 text-fog px-3 py-2.5 italic">No positions configured.<br />Add them in SysAdmin → Departments.</p>
+            <p className="text-10 text-fog px-3 py-2.5 italic">No positions configured for this department.<br />Add them in SysAdmin → Departments → Positions.</p>
           ) : (
             roles.map(r => (
               <button

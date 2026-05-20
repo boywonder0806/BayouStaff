@@ -330,11 +330,11 @@ router.post('/sysadmin/users', requireSysAdmin, async (req, res) => {
   }
 });
 
-// ── Department Roles ──────────────────────────────────────────────────────────
+// ── Department Roles & Positions ─────────────────────────────────────────────
 router.get('/departments/roles', requireAdmin, async (_req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, department, name, sort_order FROM department_roles ORDER BY department, sort_order, id`
+      `SELECT id, department, name, type, sort_order FROM department_roles ORDER BY department, type, sort_order, id`
     );
     res.json({ roles: rows });
   } catch (err) {
@@ -343,20 +343,21 @@ router.get('/departments/roles', requireAdmin, async (_req, res) => {
 });
 
 router.post('/departments/:dept/roles', requireAdmin, async (req, res) => {
-  const { name } = req.body;
+  const { name, type = 'role' } = req.body;
   const department = decodeURIComponent(req.params.dept);
   if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  if (!['role', 'position'].includes(type)) return res.status(400).json({ error: 'type must be role or position' });
   try {
     const { rows } = await pool.query(
-      `INSERT INTO department_roles (department, name, sort_order)
-       VALUES ($1, $2, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM department_roles WHERE department = $1))
-       RETURNING id, department, name, sort_order`,
-      [department, name.trim()]
+      `INSERT INTO department_roles (department, name, type, sort_order)
+       VALUES ($1, $2, $3, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM department_roles WHERE department = $1 AND type = $3))
+       RETURNING id, department, name, type, sort_order`,
+      [department, name.trim(), type]
     );
     res.status(201).json({ role: rows[0] });
   } catch (err) {
-    if (err.code === '23505') return res.status(409).json({ error: 'Position already exists.' });
-    res.status(500).json({ error: 'Failed to add role' });
+    if (err.code === '23505') return res.status(409).json({ error: 'Name already exists for this type.' });
+    res.status(500).json({ error: 'Failed to add entry' });
   }
 });
 
@@ -365,14 +366,14 @@ router.patch('/departments/roles/:id', requireAdmin, async (req, res) => {
   if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
   try {
     const { rows } = await pool.query(
-      `UPDATE department_roles SET name = $1 WHERE id = $2 RETURNING id, department, name, sort_order`,
+      `UPDATE department_roles SET name = $1 WHERE id = $2 RETURNING id, department, name, type, sort_order`,
       [name.trim(), parseInt(req.params.id)]
     );
-    if (!rows[0]) return res.status(404).json({ error: 'Role not found' });
+    if (!rows[0]) return res.status(404).json({ error: 'Not found' });
     res.json({ role: rows[0] });
   } catch (err) {
-    if (err.code === '23505') return res.status(409).json({ error: 'Position already exists.' });
-    res.status(500).json({ error: 'Failed to update role' });
+    if (err.code === '23505') return res.status(409).json({ error: 'Name already exists for this type.' });
+    res.status(500).json({ error: 'Failed to update entry' });
   }
 });
 
@@ -381,10 +382,10 @@ router.delete('/departments/roles/:id', requireAdmin, async (req, res) => {
     const { rowCount } = await pool.query(
       `DELETE FROM department_roles WHERE id = $1`, [parseInt(req.params.id)]
     );
-    if (!rowCount) return res.status(404).json({ error: 'Role not found' });
+    if (!rowCount) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to delete role' });
+    res.status(500).json({ error: 'Failed to delete entry' });
   }
 });
 
