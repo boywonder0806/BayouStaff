@@ -197,7 +197,7 @@ export default function ShiftAssignments() {
               </div>
 
               {/* Shifts table */}
-              <div className="panel overflow-hidden">
+              <div className="panel">
                 <table className="w-full text-xs table-fixed">
                   <colgroup>
                     <col className="w-[32%]" />
