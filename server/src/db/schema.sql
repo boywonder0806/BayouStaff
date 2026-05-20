@@ -88,7 +88,24 @@ CREATE TABLE IF NOT EXISTS department_roles (
   id          SERIAL PRIMARY KEY,
   department  TEXT NOT NULL,
   name        TEXT NOT NULL,
+  type        TEXT NOT NULL DEFAULT 'position', -- 'role' | 'position'
   sort_order  INT  NOT NULL DEFAULT 0,
-  UNIQUE (department, name)
+  UNIQUE (department, type, name)
 );
 CREATE INDEX IF NOT EXISTS idx_department_roles_dept ON department_roles(department);
+
+CREATE TABLE IF NOT EXISTS certifications (
+  id          SERIAL PRIMARY KEY,
+  name        TEXT NOT NULL UNIQUE,
+  department  TEXT,
+  description TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS employee_certifications (
+  employee_id      INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  certification_id INTEGER NOT NULL REFERENCES certifications(id) ON DELETE CASCADE,
+  issued_date      DATE,
+  PRIMARY KEY (employee_id, certification_id)
+);
+CREATE INDEX IF NOT EXISTS idx_emp_certs ON employee_certifications(employee_id);

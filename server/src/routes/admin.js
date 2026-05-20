@@ -471,6 +471,110 @@ router.delete('/departments/roles/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// ── Certifications ────────────────────────────────────────────────────────────
+router.get('/certifications', requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name, department, description, created_at AS "createdAt"
+       FROM certifications ORDER BY name`
+    );
+    res.json({ certifications: rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch certifications' });
+  }
+});
+
+router.post('/certifications', requireSysAdmin, async (req, res) => {
+  const { name, department, description } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO certifications (name, department, description)
+       VALUES ($1, $2, $3)
+       RETURNING id, name, department, description, created_at AS "createdAt"`,
+      [name.trim(), department || null, description || null]
+    );
+    res.status(201).json({ certification: rows[0] });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Certification name already exists.' });
+    res.status(500).json({ error: 'Failed to create certification' });
+  }
+});
+
+router.patch('/certifications/:id', requireSysAdmin, async (req, res) => {
+  const { name, department, description } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  try {
+    const { rows } = await pool.query(
+      `UPDATE certifications SET name = $1, department = $2, description = $3
+       WHERE id = $4
+       RETURNING id, name, department, description, created_at AS "createdAt"`,
+      [name.trim(), department || null, description || null, parseInt(req.params.id)]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Certification not found' });
+    res.json({ certification: rows[0] });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Certification name already exists.' });
+    res.status(500).json({ error: 'Failed to update certification' });
+  }
+});
+
+router.delete('/certifications/:id', requireSysAdmin, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query(
+      `DELETE FROM certifications WHERE id = $1`, [parseInt(req.params.id)]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'Certification not found' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete certification' });
+  }
+});
+
+router.get('/employees/:id/certifications', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT c.id, c.name, c.department, c.description, ec.issued_date AS "issuedDate"
+       FROM employee_certifications ec
+       JOIN certifications c ON c.id = ec.certification_id
+       WHERE ec.employee_id = $1
+       ORDER BY c.name`,
+      [parseInt(req.params.id)]
+    );
+    res.json({ certifications: rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch employee certifications' });
+  }
+});
+
+router.post('/employees/:id/certifications', requireSysAdmin, async (req, res) => {
+  const { certificationId, issuedDate } = req.body;
+  if (!certificationId) return res.status(400).json({ error: 'certificationId is required' });
+  try {
+    await pool.query(
+      `INSERT INTO employee_certifications (employee_id, certification_id, issued_date)
+       VALUES ($1, $2, $3)
+       ON CONFLICT DO NOTHING`,
+      [parseInt(req.params.id), parseInt(certificationId), issuedDate || null]
+    );
+    res.status(201).json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to add certification' });
+  }
+});
+
+router.delete('/employees/:id/certifications/:certId', requireSysAdmin, async (req, res) => {
+  try {
+    await pool.query(
+      `DELETE FROM employee_certifications WHERE employee_id = $1 AND certification_id = $2`,
+      [parseInt(req.params.id), parseInt(req.params.certId)]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to remove certification' });
+  }
+});
+
 // ── SysAdmin ──────────────────────────────────────────────────────────────────
 router.patch('/sysadmin/users/:id', requireSysAdmin, async (req, res) => {
   const { name, email, role, department, departments, position, phone, isActive } = req.body;

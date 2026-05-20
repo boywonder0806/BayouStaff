@@ -16,6 +16,7 @@ import SysAdminUsers from './pages/admin/sysadmin/Users.jsx';
 import SysAdminDepartments from './pages/admin/sysadmin/Departments.jsx';
 import SysAdminLogs from './pages/admin/sysadmin/Logs.jsx';
 import SysAdminAPI from './pages/admin/sysadmin/API.jsx';
+import SysAdminCertifications from './pages/admin/sysadmin/Certifications.jsx';
 
 function ProtectedRoute({ children, adminOnly = false, sysadminOnly = false }) {
   const { user, loading } = useAuth();
@@ -74,10 +75,11 @@ function AppRoutes() {
           }
         >
           <Route index element={<Navigate to="users" replace />} />
-          <Route path="users"       element={<SysAdminUsers />} />
-          <Route path="departments" element={<SysAdminDepartments />} />
-          <Route path="logs"        element={<SysAdminLogs />} />
-          <Route path="api"         element={<SysAdminAPI />} />
+          <Route path="users"          element={<SysAdminUsers />} />
+          <Route path="departments"    element={<SysAdminDepartments />} />
+          <Route path="certifications" element={<SysAdminCertifications />} />
+          <Route path="logs"           element={<SysAdminLogs />} />
+          <Route path="api"            element={<SysAdminAPI />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

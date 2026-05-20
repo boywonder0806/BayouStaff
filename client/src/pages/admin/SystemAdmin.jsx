@@ -238,6 +238,34 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate, onStaffUpdate }) {
   const [deptAccess, setDeptAccess]       = useState(user.departments ?? []);
   const [deptSaving, setDeptSaving]       = useState(false);
   const [deptSuccess, setDeptSuccess]     = useState(false);
+  const [allCerts, setAllCerts]           = useState([]);
+  const [empCertIds, setEmpCertIds]       = useState(new Set());
+  const [certLoading, setCertLoading]     = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/admin/certifications'),
+      api.get(`/admin/employees/${user.id}/certifications`),
+    ]).then(([allRes, empRes]) => {
+      setAllCerts(allRes.data.certifications);
+      setEmpCertIds(new Set(empRes.data.certifications.map(c => c.id)));
+    }).catch(console.error).finally(() => setCertLoading(false));
+  }, [user.id]);
+
+  async function toggleCert(cert) {
+    const has = empCertIds.has(cert.id);
+    if (has) {
+      try {
+        await api.delete(`/admin/employees/${user.id}/certifications/${cert.id}`);
+        setEmpCertIds(prev => { const n = new Set(prev); n.delete(cert.id); return n; });
+      } catch (err) { console.error(err); }
+    } else {
+      try {
+        await api.post(`/admin/employees/${user.id}/certifications`, { certificationId: cert.id });
+        setEmpCertIds(prev => new Set([...prev, cert.id]));
+      } catch (err) { console.error(err); }
+    }
+  }
 
   const role = ROLES.find(r => r.value === user.role) ?? ROLES[0];
 
@@ -301,7 +329,7 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate, onStaffUpdate }) {
       onClick={handleBackdrop}
       className="fixed inset-0 z-50 flex items-center justify-center bg-void/70 backdrop-blur-sm"
     >
-      <div className="w-full max-w-2xl mx-4 bg-deep border border-rim/60 rounded-2xl shadow-2xl overflow-hidden">
+      <div className="w-full max-w-2xl mx-4 bg-deep border border-rim/60 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
 
         {/* Modal header */}
         <div className="relative bg-shell/60 border-b border-rim/40 px-7 py-5">
@@ -329,7 +357,7 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate, onStaffUpdate }) {
         </div>
 
         {/* Modal body */}
-        <div className="p-7 space-y-6">
+        <div className="p-7 space-y-6 overflow-y-auto flex-1">
 
           {/* Account info grid */}
           <div>
@@ -405,6 +433,38 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate, onStaffUpdate }) {
               </button>
             </div>
           )}
+
+          {/* Certifications */}
+          <div>
+            <p className="label-xs mb-1">Certifications</p>
+            <p className="text-10 text-fog mb-3">Toggle certifications this employee has completed. These qualify them for specific scheduled positions.</p>
+            {certLoading ? (
+              <p className="text-10 text-fog">Loading…</p>
+            ) : allCerts.length === 0 ? (
+              <p className="text-10 text-fog">No certifications defined yet. Add them in <span className="text-fog-hi">SysAdmin → Certifications</span>.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {allCerts.map(cert => {
+                  const has = empCertIds.has(cert.id);
+                  return (
+                    <button
+                      key={cert.id}
+                      onClick={() => toggleCert(cert)}
+                      title={cert.description || cert.name}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all
+                        ${has
+                          ? 'bg-cyan/15 border-cyan/40 text-cyan ring-1 ring-inset ring-cyan/20'
+                          : 'bg-shell/40 border-rim/50 text-fog hover:border-rim hover:text-fog-hi'
+                        }`}
+                    >
+                      {cert.name}
+                      {cert.department && <span className="ml-1.5 opacity-60 font-normal">· {cert.department}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Account actions */}
           <div>
