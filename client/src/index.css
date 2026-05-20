@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #071520;
+    color: #E8F4FF;
+    @apply font-body antialiased;
+  }
+  h1, h2, h3, h4, h5 { @apply font-heading; }
+  * { box-sizing: border-box; }
+
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #1E4568; border-radius: 9999px; }
+
+  @keyframes wave-flow {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+  }
+}
+
+@layer components {
+  /* ── Buttons ─────────────────────────────── */
+  .btn-primary {
+    @apply bg-cyan hover:bg-cyan-dark text-void font-heading font-bold
+           px-5 py-2.5 rounded-md text-sm tracking-wide
+           transition-all duration-150
+           disabled:opacity-40 disabled:cursor-not-allowed;
+    letter-spacing: 0.05em;
+  }
+  .btn-ghost {
+    @apply text-fog-hi hover:text-ink hover:bg-shell
+           px-3 py-1.5 rounded-md text-sm font-semibold transition-all duration-150;
+  }
+
+  /* ── Surfaces ────────────────────────────── */
+  .panel {
+    @apply bg-deep rounded-xl;
+    border: 1px solid rgba(30, 69, 104, 0.8);
+  }
+  .panel-raised {
+    @apply bg-shell rounded-xl;
+    border: 1px solid rgba(30, 69, 104, 1);
+  }
+
+  /* ── Form inputs ─────────────────────────── */
+  .field {
+    @apply w-full bg-shell text-ink placeholder-fog
+           px-4 py-3 rounded-md text-sm
+           focus:outline-none transition-all duration-150;
+    border: 1px solid #1E4568;
+  }
+  .field:focus {
+    border-color: #00C8FF;
+    box-shadow: 0 0 0 3px rgba(0, 200, 255, 0.15);
+  }
+
+  /* ── Typography ──────────────────────────── */
+  .label-xs {
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #5A8AAA;
+  }
+  .num-display {
+    @apply font-heading font-extrabold tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  /* ── Nav active glow ─────────────────────── */
+  .nav-glow {
+    filter: drop-shadow(0 0 8px rgba(0, 200, 255, 0.70));
+  }
+}

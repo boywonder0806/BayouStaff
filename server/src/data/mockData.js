@@ -1,0 +1,230 @@
+// Temporary mock data — replace with Netchex API + PostgreSQL queries
+export const MOCK_USERS = [
+  {
+    id: 1,
+    email: 'sarah@bluebayou.com',
+    password: 'password',
+    name: 'Sarah Johnson',
+    role: 'crew_member',
+    department: 'Aquatics',
+    departments: ['Aquatics'],
+    position: 'Lifeguard',
+    avatar: 'SJ',
+    phone: '(225) 555-0101',
+    hireDate: '2024-05-15',
+  },
+  {
+    id: 2,
+    email: 'manager@bluebayou.com',
+    password: 'password',
+    name: 'James Williams',
+    role: 'manager',
+    department: 'Management',
+    departments: ['Management', 'Aquatics', 'Guest Services', 'Food & Beverage'],
+    position: 'Shift Manager',
+    avatar: 'JW',
+    phone: '(225) 555-0100',
+    hireDate: '2021-03-01',
+  },
+  {
+    id: 3,
+    email: 'mike@bluebayou.com',
+    password: 'password',
+    name: 'Mike Rodriguez',
+    role: 'crew_member',
+    department: 'Food & Beverage',
+    departments: ['Food & Beverage'],
+    position: 'Team Member',
+    avatar: 'MR',
+    phone: '(225) 555-0102',
+    hireDate: '2025-04-10',
+  },
+  {
+    id: 4,
+    email: 'emily@bluebayou.com',
+    password: 'password',
+    name: 'Emily Chen',
+    role: 'crew_member',
+    department: 'Guest Services',
+    departments: ['Guest Services'],
+    position: 'Attendant',
+    avatar: 'EC',
+    phone: '(225) 555-0103',
+    hireDate: '2025-05-01',
+  },
+  {
+    id: 5,
+    email: 'sysadmin@bluebayou.com',
+    password: 'password',
+    name: 'Isaac Joyner',
+    role: 'sysadmin',
+    department: 'Management',
+    departments: ['Management'],
+    position: 'System Administrator',
+    avatar: 'IJ',
+    phone: '(225) 555-0099',
+    hireDate: '2020-01-01',
+  },
+];
+
+// Shifts for the current week (week of 2026-05-18)
+export const MOCK_SHIFTS = [
+  // Sarah (employee 1) - Aquatics
+  { id: 1, employeeId: 1, date: '2026-05-18', start: '09:00', end: '17:00', department: 'Aquatics', position: 'Lifeguard', location: 'Wave Pool' },
+  { id: 2, employeeId: 1, date: '2026-05-20', start: '12:00', end: '20:00', department: 'Aquatics', position: 'Lifeguard', location: 'Slide Area' },
+  { id: 3, employeeId: 1, date: '2026-05-22', start: '09:00', end: '17:00', department: 'Aquatics', position: 'Lifeguard', location: 'Lazy River' },
+  { id: 4, employeeId: 1, date: '2026-05-23', start: '08:00', end: '16:00', department: 'Aquatics', position: 'Lifeguard', location: 'Main Pool' },
+
+  // James (employee 2) - Management
+  { id: 5, employeeId: 2, date: '2026-05-18', start: '08:00', end: '18:00', department: 'Management', position: 'Shift Manager', location: 'Park-Wide' },
+  { id: 6, employeeId: 2, date: '2026-05-19', start: '08:00', end: '18:00', department: 'Management', position: 'Shift Manager', location: 'Park-Wide' },
+  { id: 7, employeeId: 2, date: '2026-05-21', start: '08:00', end: '18:00', department: 'Management', position: 'Shift Manager', location: 'Park-Wide' },
+  { id: 8, employeeId: 2, date: '2026-05-22', start: '08:00', end: '18:00', department: 'Management', position: 'Shift Manager', location: 'Park-Wide' },
+
+  // Mike (employee 3) - F&B
+  { id: 9,  employeeId: 3, date: '2026-05-18', start: '10:00', end: '18:00', department: 'Food & Beverage', position: 'Team Member', location: 'Snack Shack' },
+  { id: 10, employeeId: 3, date: '2026-05-19', start: '10:00', end: '18:00', department: 'Food & Beverage', position: 'Team Member', location: 'Snack Shack' },
+  { id: 11, employeeId: 3, date: '2026-05-23', start: '09:00', end: '17:00', department: 'Food & Beverage', position: 'Team Member', location: 'Main Concessions' },
+  { id: 12, employeeId: 3, date: '2026-05-24', start: '09:00', end: '17:00', department: 'Food & Beverage', position: 'Team Member', location: 'Main Concessions' },
+
+  // Emily (employee 4) - Guest Services
+  { id: 13, employeeId: 4, date: '2026-05-19', start: '08:00', end: '16:00', department: 'Guest Services', position: 'Attendant', location: 'Main Entrance' },
+  { id: 14, employeeId: 4, date: '2026-05-20', start: '08:00', end: '16:00', department: 'Guest Services', position: 'Attendant', location: 'Main Entrance' },
+  { id: 15, employeeId: 4, date: '2026-05-22', start: '10:00', end: '18:00', department: 'Guest Services', position: 'Attendant', location: 'Cabana Rentals' },
+  { id: 16, employeeId: 4, date: '2026-05-24', start: '10:00', end: '18:00', department: 'Guest Services', position: 'Attendant', location: 'Cabana Rentals' },
+];
+
+export const MOCK_CONVERSATIONS = [
+  {
+    id: 1,
+    name: 'Aquatics Team',
+    type: 'group',
+    members: [1, 2],
+    lastMessage: 'Don\'t forget — rotation starts at 10am sharp.',
+    lastMessageTime: '2026-05-18T08:30:00Z',
+  },
+  {
+    id: 2,
+    name: 'All Staff',
+    type: 'group',
+    members: [1, 2, 3, 4],
+    lastMessage: 'Park opens at 9am this Saturday. All hands on deck!',
+    lastMessageTime: '2026-05-17T16:00:00Z',
+  },
+  {
+    id: 3,
+    name: 'James Williams',
+    type: 'direct',
+    members: [1, 2],
+    lastMessage: 'You\'re approved for Sunday off.',
+    lastMessageTime: '2026-05-16T14:22:00Z',
+  },
+];
+
+export const MOCK_MESSAGES = {
+  1: [
+    { id: 1, senderId: 2, text: 'Morning team! Big day ahead — please check the rotation board before your shift.', time: '2026-05-18T07:55:00Z' },
+    { id: 2, senderId: 1, text: 'Got it! Will do.', time: '2026-05-18T08:10:00Z' },
+    { id: 3, senderId: 2, text: 'Don\'t forget — rotation starts at 10am sharp.', time: '2026-05-18T08:30:00Z' },
+  ],
+  2: [
+    { id: 4, senderId: 2, text: 'Park opens at 9am this Saturday. All hands on deck!', time: '2026-05-17T16:00:00Z' },
+    { id: 5, senderId: 3, text: 'I\'ll be there at 8:30.', time: '2026-05-17T16:15:00Z' },
+    { id: 6, senderId: 4, text: 'Same here!', time: '2026-05-17T16:20:00Z' },
+  ],
+  3: [
+    { id: 7, senderId: 1, text: 'Hey James, any chance I can get Sunday off? I have a family event.', time: '2026-05-16T13:00:00Z' },
+    { id: 8, senderId: 2, text: 'Let me check the schedule...', time: '2026-05-16T14:00:00Z' },
+    { id: 9, senderId: 2, text: 'You\'re approved for Sunday off.', time: '2026-05-16T14:22:00Z' },
+    { id: 10, senderId: 1, text: 'Thank you so much!', time: '2026-05-16T14:25:00Z' },
+  ],
+};
+
+// Draft shifts for Plan Schedule (next 2 weeks: 2026-05-25 – 2026-06-07)
+export const MOCK_DRAFT_SHIFTS = [
+  { id: 1001, employeeId: 1, date: '2026-05-25', start: '09:00', end: '17:00', department: 'Aquatics', position: 'Lifeguard', location: 'Wave Pool', notes: '' },
+  { id: 1002, employeeId: 1, date: '2026-05-27', start: '12:00', end: '20:00', department: 'Aquatics', position: 'Lifeguard', location: 'Slide Area', notes: '' },
+  { id: 1003, employeeId: 1, date: '2026-05-31', start: '09:00', end: '17:00', department: 'Aquatics', position: 'Lifeguard', location: 'Main Pool', notes: '' },
+  { id: 1004, employeeId: 2, date: '2026-05-25', start: '08:00', end: '18:00', department: 'Management', position: 'Shift Manager', location: 'Park-Wide', notes: '' },
+  { id: 1005, employeeId: 2, date: '2026-05-26', start: '08:00', end: '18:00', department: 'Management', position: 'Shift Manager', location: 'Park-Wide', notes: '' },
+  { id: 1006, employeeId: 2, date: '2026-06-01', start: '08:00', end: '18:00', department: 'Management', position: 'Shift Manager', location: 'Park-Wide', notes: '' },
+  { id: 1007, employeeId: 2, date: '2026-06-03', start: '08:00', end: '18:00', department: 'Management', position: 'Shift Manager', location: 'Park-Wide', notes: '' },
+  { id: 1008, employeeId: 3, date: '2026-05-25', start: '10:00', end: '18:00', department: 'Food & Beverage', position: 'Team Member', location: 'Snack Shack', notes: '' },
+  { id: 1009, employeeId: 3, date: '2026-05-30', start: '09:00', end: '17:00', department: 'Food & Beverage', position: 'Team Member', location: 'Main Concessions', notes: '' },
+  { id: 1010, employeeId: 4, date: '2026-05-26', start: '08:00', end: '16:00', department: 'Guest Services', position: 'Attendant', location: 'Main Entrance', notes: '' },
+  { id: 1011, employeeId: 4, date: '2026-05-28', start: '10:00', end: '18:00', department: 'Guest Services', position: 'Attendant', location: 'Cabana Rentals', notes: '' },
+  { id: 1012, employeeId: 4, date: '2026-06-02', start: '08:00', end: '16:00', department: 'Guest Services', position: 'Attendant', location: 'Main Entrance', notes: '' },
+];
+
+export const MOCK_ANNOUNCEMENTS = [
+  {
+    id: 1,
+    title: 'Park Opens Saturday at 9am — All Hands Required',
+    body: 'This Saturday is our biggest attendance day of the season. All staff must report 30 minutes before their shift for a quick uniform check. See your supervisor if you have questions.',
+    author: 'James Williams',
+    authorAvatar: 'JW',
+    department: null,
+    date: '2026-05-17',
+    priority: 'high',
+  },
+  {
+    id: 2,
+    title: 'Updated Break Room Schedule',
+    body: 'The break room schedule has been updated for the summer season. Please review the posted schedule and coordinate with your team lead if you have a conflict.',
+    author: 'James Williams',
+    authorAvatar: 'JW',
+    department: null,
+    date: '2026-05-16',
+    priority: 'normal',
+  },
+  {
+    id: 3,
+    title: 'Employee of the Month — May 2026',
+    body: 'Congratulations to Sarah Johnson (Aquatics) for consistently going above and beyond for our guests this month. A gift card is waiting for you at the front office!',
+    author: 'James Williams',
+    authorAvatar: 'JW',
+    department: null,
+    date: '2026-05-15',
+    priority: 'normal',
+  },
+  {
+    id: 4,
+    title: 'Reminder: Sun Safety Policy',
+    body: 'All outdoor staff must apply SPF 30+ sunscreen every two hours. Sunscreen is available at each lifeguard station and the main office. Stay safe out there!',
+    author: 'James Williams',
+    authorAvatar: 'JW',
+    department: null,
+    date: '2026-05-12',
+    priority: 'normal',
+  },
+  {
+    id: 5,
+    title: 'Rotation Schedule Update — Wave Pool',
+    body: 'Effective this weekend the wave pool rotation will shift to 20-minute intervals instead of 30. Please review the new board at the guard station before your shift. All lifeguards must initial the rotation log.',
+    author: 'James Williams',
+    authorAvatar: 'JW',
+    department: 'Aquatics',
+    date: '2026-05-16',
+    priority: 'high',
+  },
+  {
+    id: 6,
+    title: 'New POS System Training — Thursday',
+    body: 'We are upgrading to a new point-of-sale system this week. All Food & Beverage staff are required to attend a 20-minute training session Thursday before your shift. See Mike for your time slot.',
+    author: 'James Williams',
+    authorAvatar: 'JW',
+    department: 'Food & Beverage',
+    date: '2026-05-14',
+    priority: 'normal',
+  },
+  {
+    id: 7,
+    title: 'Guest Services Scripts Updated',
+    body: 'The standard greeting and upsell scripts for cabana rentals and season passes have been updated. Printed copies are at the information desk. Please review before your next shift.',
+    author: 'James Williams',
+    authorAvatar: 'JW',
+    department: 'Guest Services',
+    date: '2026-05-13',
+    priority: 'normal',
+  },
+];

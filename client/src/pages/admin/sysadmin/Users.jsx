@@ -1,0 +1,569 @@
+import { useState, useEffect, useRef } from 'react';
+import { format, parseISO } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
+import api from '../../../lib/api.js';
+import { useAuth } from '../../../context/AuthContext.jsx';
+
+export const ROLES = [
+  { value: 'crew_member', label: 'Crew Member',         style: 'bg-rim/40 border-rim text-fog-hi',       active: 'bg-shell border-fog-hi/40 text-ink'  },
+  { value: 'manager',     label: 'Manager',              style: 'bg-cyan/10 border-cyan/20 text-cyan',     active: 'bg-cyan/15 border-cyan/40 text-cyan'  },
+  { value: 'sysadmin',    label: 'System Administrator', style: 'bg-gold/10 border-gold/25 text-gold',     active: 'bg-gold/15 border-gold/40 text-gold'  },
+];
+
+const DEPT_FILTERS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew', 'Management'];
+
+const DEPT_PILL = {
+  'Aquatics':        'bg-aq/10 border-aq/30 text-aq',
+  'Guest Services':  'bg-gs/10 border-gs/30 text-gs',
+  'Food & Beverage': 'bg-fb/10 border-fb/30 text-fb',
+  'Cleaning Crew':   'bg-cc/10 border-cc/30 text-cc',
+  'Management':      'bg-mgmt/10 border-mgmt/30 text-mgmt',
+};
+
+export default function SysAdminUsers() {
+  const { user: me } = useAuth();
+  const [staff, setStaff]         = useState([]);
+  const [selected, setSelected]   = useState(null);
+  const [search, setSearch]       = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [deptFilter, setDeptFilter] = useState('all');
+
+  useEffect(() => {
+    api.get('/admin/employees')
+      .then(r => setStaff(r.data.employees))
+      .catch(console.error);
+  }, []);
+
+  function handleRoleUpdate(userId, newRole) {
+    setStaff(prev => prev.map(s => s.id === userId ? { ...s, role: newRole } : s));
+    if (selected?.id === userId) setSelected(s => ({ ...s, role: newRole }));
+  }
+
+  const counts = ROLES.reduce((acc, r) => {
+    acc[r.value] = staff.filter(s => s.role === r.value).length;
+    return acc;
+  }, {});
+
+  const visible = staff.filter(s => {
+    if (roleFilter !== 'all' && s.role !== roleFilter) return false;
+    if (deptFilter !== 'all' && !(s.departments ?? [s.department]).includes(deptFilter)) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return (
+        s.name.toLowerCase().includes(q) ||
+        s.email.toLowerCase().includes(q) ||
+        s.position?.toLowerCase().includes(q) ||
+        s.department?.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
+
+  const isFiltered = search || roleFilter !== 'all' || deptFilter !== 'all';
+
+  function clearFilters() {
+    setSearch('');
+    setRoleFilter('all');
+    setDeptFilter('all');
+  }
+
+  return (
+    <div className="flex flex-col gap-5" style={{ height: 'calc(100vh - 3rem)' }}>
+
+      {/* Header */}
+      <div className="flex items-end justify-between shrink-0">
+        <div>
+          <p className="label-xs mb-1">System Admin / Users</p>
+          <h1 className="font-heading font-black text-ink text-3xl leading-none uppercase tracking-tight">
+            User Management
+          </h1>
+        </div>
+        <div className="flex gap-2 pb-1">
+          {ROLES.map(r => (
+            <div key={r.value} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-10 font-bold tracking-widest uppercase ${r.style}`}>
+              <span className="text-lg font-heading font-black leading-none">{counts[r.value] ?? 0}</span>
+              {r.label}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Content — full width user list */}
+      <div className="flex-1 min-h-0">
+        <div className="panel p-5 h-full flex flex-col gap-4 min-h-0">
+
+          {/* Search + count */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="relative flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-fog pointer-events-none">
+                <SearchIcon />
+              </span>
+              <input
+                type="text"
+                className="field pl-9 pr-9 text-sm"
+                placeholder="Search by name, email, position, or department…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-fog hover:text-ink transition-colors"
+                >
+                  <XIcon />
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-10 text-fog whitespace-nowrap">
+                {isFiltered ? `${visible.length} of ${staff.length}` : `${staff.length} total`}
+              </span>
+              {isFiltered && (
+                <button
+                  onClick={clearFilters}
+                  className="text-10 font-bold tracking-widest uppercase text-cyan hover:text-cyan-light transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Filter rows */}
+          <div className="flex flex-col gap-2 shrink-0">
+            {/* Role filter */}
+            <div className="flex items-center gap-2">
+              <span className="label-xs w-16 shrink-0">Role</span>
+              <div className="flex gap-1.5 flex-wrap">
+                <FilterPill
+                  label="All"
+                  active={roleFilter === 'all'}
+                  onClick={() => setRoleFilter('all')}
+                />
+                {ROLES.map(r => (
+                  <FilterPill
+                    key={r.value}
+                    label={r.label}
+                    active={roleFilter === r.value}
+                    activeClass={r.active}
+                    onClick={() => setRoleFilter(roleFilter === r.value ? 'all' : r.value)}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Department filter */}
+            <div className="flex items-center gap-2">
+              <span className="label-xs w-16 shrink-0">Dept</span>
+              <div className="flex gap-1.5 flex-wrap">
+                <FilterPill
+                  label="All"
+                  active={deptFilter === 'all'}
+                  onClick={() => setDeptFilter('all')}
+                />
+                {DEPT_FILTERS.map(dept => (
+                  <FilterPill
+                    key={dept}
+                    label={dept}
+                    active={deptFilter === dept}
+                    activeClass={DEPT_PILL[dept]}
+                    onClick={() => setDeptFilter(deptFilter === dept ? 'all' : dept)}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-rim/40 shrink-0" />
+
+          {/* User list */}
+          <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+            {visible.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-32 gap-2">
+                <p className="text-fog text-sm">No users match your search or filters.</p>
+                <button onClick={clearFilters} className="text-10 font-bold tracking-widest uppercase text-cyan hover:text-cyan-light transition-colors">
+                  Clear filters
+                </button>
+              </div>
+            ) : (
+              visible.map(s => {
+                const role = ROLES.find(r => r.value === s.role) ?? ROLES[0];
+                const isSelf = s.id === me?.id;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setSelected(s)}
+                    className="w-full flex items-center gap-4 bg-shell/40 hover:bg-shell border border-rim/40 hover:border-rim/80 rounded-xl px-4 py-3 text-left transition-all group"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-shell border border-rim flex items-center justify-center text-sm font-heading font-bold text-fog-hi shrink-0">
+                      {s.avatar}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-ink truncate">{s.name}</p>
+                        {isSelf && <span className="text-10 text-fog">(you)</span>}
+                      </div>
+                      <p className="text-10 text-fog mt-0.5">{s.position} · {s.department}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className={`text-10 font-bold tracking-widests uppercase px-2.5 py-1 rounded-full border ${role.style}`}>
+                        {role.label}
+                      </span>
+                      <p className="text-10 text-fog mt-1.5">{s.email}</p>
+                    </div>
+                    <span className="text-fog/30 group-hover:text-fog transition-colors ml-1">
+                      <ChevronIcon />
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* User modal */}
+      {selected && (
+        <UserModal
+          user={selected}
+          isSelf={selected.id === me?.id}
+          onClose={() => setSelected(null)}
+          onRoleUpdate={handleRoleUpdate}
+        />
+      )}
+    </div>
+  );
+}
+
+const ALL_DEPARTMENTS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew'];
+
+const DEPT_STYLE = {
+  'Aquatics':        { active: 'bg-aq/15 border-aq/40 text-aq',     inactive: 'border-rim/50 text-fog hover:border-aq/30 hover:text-aq'     },
+  'Guest Services':  { active: 'bg-gs/15 border-gs/40 text-gs',     inactive: 'border-rim/50 text-fog hover:border-gs/30 hover:text-gs'     },
+  'Food & Beverage': { active: 'bg-fb/15 border-fb/40 text-fb',     inactive: 'border-rim/50 text-fog hover:border-fb/30 hover:text-fb'     },
+  'Cleaning Crew':   { active: 'bg-cc/15 border-cc/40 text-cc',     inactive: 'border-rim/50 text-fog hover:border-cc/30 hover:text-cc'     },
+};
+
+// ── User Modal ────────────────────────────────────────────────────────────────
+function UserModal({ user, isSelf, onClose, onRoleUpdate }) {
+  const navigate    = useNavigate();
+  const backdropRef = useRef(null);
+  const [saving, setSaving]                 = useState(false);
+  const [deptSaving, setDeptSaving]         = useState(false);
+  const [activeDepts, setActiveDepts]       = useState(user.departments ?? [user.department]);
+  const [pwMode, setPwMode]                 = useState(false);
+  const [newPassword, setNewPassword]       = useState('');
+  const [pwError, setPwError]               = useState('');
+  const [pwSuccess, setPwSuccess]           = useState(false);
+  const [deactivateStep, setDeactivateStep] = useState(false);
+
+  const role = ROLES.find(r => r.value === user.role) ?? ROLES[0];
+
+  function handleBackdrop(e) {
+    if (e.target === backdropRef.current) onClose();
+  }
+
+  async function handleRoleChange(newRole) {
+    if (newRole === user.role || isSelf) return;
+    setSaving(true);
+    try {
+      await api.patch(`/admin/employees/${user.id}/role`, { role: newRole });
+      onRoleUpdate(user.id, newRole);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeptToggle(dept) {
+    const isPrimary = dept === user.department;
+    let next;
+    if (activeDepts.includes(dept)) {
+      if (isPrimary || activeDepts.length === 1) return; // can't remove primary or last
+      next = activeDepts.filter(d => d !== dept);
+    } else {
+      next = [...activeDepts, dept];
+    }
+    setActiveDepts(next);
+    setDeptSaving(true);
+    try {
+      await api.patch(`/admin/employees/${user.id}/departments`, { departments: next });
+    } catch (err) {
+      setActiveDepts(activeDepts); // revert on error
+      console.error(err);
+    } finally {
+      setDeptSaving(false);
+    }
+  }
+
+  async function handlePasswordReset() {
+    setPwError('');
+    if (newPassword.length < 6) { setPwError('Minimum 6 characters.'); return; }
+    setSaving(true);
+    try {
+      await api.patch(`/admin/employees/${user.id}/password`, { password: newPassword });
+      setPwSuccess(true);
+      setNewPassword('');
+      setTimeout(() => { setPwSuccess(false); setPwMode(false); }, 2000);
+    } catch (err) {
+      setPwError(err.response?.data?.error || 'Failed to reset password.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      ref={backdropRef}
+      onClick={handleBackdrop}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-void/70 backdrop-blur-sm"
+    >
+      <div className="w-full max-w-2xl mx-4 bg-deep border border-rim/60 rounded-2xl shadow-2xl overflow-hidden">
+
+        {/* Header */}
+        <div className="relative bg-shell/60 border-b border-rim/40 px-7 py-5">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-deep border-2 border-rim flex items-center justify-center font-heading font-black text-lg text-fog-hi shrink-0">
+              {user.avatar}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 className="font-heading font-black text-ink text-xl leading-none">{user.name}</h2>
+                {isSelf && <span className="text-10 text-fog font-bold tracking-widest uppercase">(you)</span>}
+                <span className={`text-10 font-bold tracking-widest uppercase px-2.5 py-1 rounded-full border ${role.style}`}>
+                  {role.label}
+                </span>
+              </div>
+              <p className="text-sm text-fog mt-1">{user.email}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 w-8 h-8 rounded-full bg-shell hover:bg-rim/60 border border-rim/60 flex items-center justify-center text-fog hover:text-ink transition-colors"
+          >
+            <CloseIcon />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-7 space-y-6">
+
+          {/* Info grid */}
+          <div>
+            <p className="label-xs mb-3">Account Information</p>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+              <Field label="Email"       value={user.email} />
+              <Field label="Phone"       value={user.phone ?? '—'} />
+              <Field label="Department"  value={user.department} />
+              <Field label="Position"    value={user.position} />
+              <Field label="Employee ID" value={`#${String(user.id).padStart(4, '0')}`} />
+              <Field label="Hire Date"   value={user.hireDate ? format(parseISO(user.hireDate), 'MMMM d, yyyy') : '—'} />
+            </div>
+          </div>
+
+          {/* Role assignment */}
+          <div>
+            <p className="label-xs mb-3">
+              Role Assignment
+              {isSelf && <span className="normal-case font-normal tracking-normal text-fog ml-1">— cannot edit your own role</span>}
+            </p>
+            <div className="flex gap-2 flex-wrap">
+              {ROLES.map(r => (
+                <button
+                  key={r.value}
+                  disabled={isSelf || saving}
+                  onClick={() => handleRoleChange(r.value)}
+                  className={`flex-1 py-2.5 px-3 rounded-lg border text-xs font-bold tracking-wide transition-all
+                    ${user.role === r.value
+                      ? r.active + ' ring-1 ring-inset ring-current/30'
+                      : 'bg-shell/40 border-rim/50 text-fog hover:border-rim hover:text-fog-hi'
+                    }
+                    ${(isSelf || saving) ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Department Access */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <p className="label-xs">Department Access</p>
+              <div className="flex items-center gap-1.5">
+                {deptSaving && <span className="text-10 text-fog animate-pulse">Saving…</span>}
+                <span className="text-10 text-fog">Primary: <span className="text-fog-hi font-semibold">{user.department}</span></span>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {ALL_DEPARTMENTS.map(dept => {
+                const isActive  = activeDepts.includes(dept);
+                const isPrimary = dept === user.department;
+                const ds = DEPT_STYLE[dept];
+                return (
+                  <button
+                    key={dept}
+                    onClick={() => handleDeptToggle(dept)}
+                    disabled={deptSaving || isPrimary}
+                    title={isPrimary ? 'Primary department — cannot remove' : undefined}
+                    className={`flex items-center justify-between px-3 py-2.5 rounded-lg border text-xs font-semibold transition-all
+                      ${isActive ? ds.active : 'bg-shell/20 ' + ds.inactive}
+                      ${isPrimary ? 'cursor-default opacity-80' : deptSaving ? 'opacity-50 cursor-wait' : 'cursor-pointer'}
+                    `}
+                  >
+                    <span>{dept}</span>
+                    <span className="flex items-center gap-1.5 shrink-0 ml-2">
+                      {isPrimary && <span className="text-10 tracking-widest uppercase opacity-60">primary</span>}
+                      <span className={`w-4 h-4 rounded border flex items-center justify-center transition-colors
+                        ${isActive ? 'border-current bg-current/20' : 'border-current/30'}`}>
+                        {isActive && (
+                          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2} className="w-2.5 h-2.5">
+                            <polyline points="2 6 5 9 10 3" />
+                          </svg>
+                        )}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-10 text-fog mt-2">
+              Cross-trained departments give access to restricted content for those areas.
+            </p>
+          </div>
+
+          {/* Actions */}
+          <div>
+            <p className="label-xs mb-3">Account Actions</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-shell/40 border border-rim/40 rounded-xl p-4">
+                <p className="text-xs font-semibold text-ink mb-1">Reset Password</p>
+                <p className="text-10 text-fog mb-3">Set a new password for this account.</p>
+                {!pwMode ? (
+                  <button onClick={() => { setPwMode(true); setPwSuccess(false); setPwError(''); }}
+                    className="btn-ghost border border-rim/60 rounded-md w-full text-xs">
+                    Reset Password
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <input type="password" className="field text-xs" placeholder="New password (min 6 chars)"
+                      value={newPassword} onChange={e => setNewPassword(e.target.value)} autoFocus />
+                    {pwError   && <p className="text-10 text-red-400 font-semibold">{pwError}</p>}
+                    {pwSuccess && <p className="text-10 text-green-400 font-semibold">Password updated.</p>}
+                    <div className="flex gap-2">
+                      <button onClick={handlePasswordReset} disabled={saving}
+                        className="btn-primary flex-1 text-xs py-2">
+                        {saving ? 'Saving…' : 'Confirm'}
+                      </button>
+                      <button onClick={() => { setPwMode(false); setNewPassword(''); setPwError(''); }}
+                        className="btn-ghost border border-rim/60 rounded-md flex-1 text-xs">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-shell/40 border border-rim/40 rounded-xl p-4 flex flex-col gap-2">
+                <p className="text-xs font-semibold text-ink mb-1">Quick Actions</p>
+                <button onClick={() => navigate('/messages')}
+                  className="btn-ghost border border-rim/60 rounded-md w-full text-xs text-left px-3">
+                  Send Message
+                </button>
+                <button onClick={() => navigate('/schedule')}
+                  className="btn-ghost border border-rim/60 rounded-md w-full text-xs text-left px-3">
+                  View Schedule
+                </button>
+              </div>
+            </div>
+
+            {!isSelf && (
+              <div className="mt-3 bg-red-950/20 border border-red-500/20 rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-red-300">Deactivate Account</p>
+                    <p className="text-10 text-fog mt-0.5">Revokes access immediately. This can be reversed.</p>
+                  </div>
+                  {!deactivateStep ? (
+                    <button onClick={() => setDeactivateStep(true)}
+                      className="shrink-0 ml-4 px-4 py-2 rounded-md text-xs font-bold text-red-400 border border-red-500/30 hover:bg-red-500/10 transition-colors">
+                      Deactivate
+                    </button>
+                  ) : (
+                    <div className="flex gap-2 ml-4 shrink-0">
+                      <button onClick={() => setDeactivateStep(false)}
+                        className="px-3 py-2 rounded-md text-xs font-bold text-fog border border-rim/60 hover:text-ink transition-colors">
+                        Cancel
+                      </button>
+                      <button className="px-3 py-2 rounded-md text-xs font-bold bg-red-500 text-white hover:bg-red-600 transition-colors">
+                        Confirm
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, value }) {
+  return (
+    <div>
+      <p className="label-xs mb-1">{label}</p>
+      <p className="text-sm text-ink font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+      <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  );
+}
+
+function XIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3.5 h-3.5">
+      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
+function FilterPill({ label, active, activeClass, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-1 rounded-full border text-10 font-bold tracking-widests uppercase transition-all
+        ${active
+          ? activeClass ?? 'bg-shell border-fog-hi/40 text-ink'
+          : 'bg-transparent border-rim/50 text-fog hover:border-rim hover:text-fog-hi'
+        }`}
+    >
+      {label}
+    </button>
+  );
+}
