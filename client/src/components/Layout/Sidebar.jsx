@@ -9,12 +9,10 @@ const NAV = [
   { to: '/timeoff',       label: 'T.Off',    icon: TimeOffIcon   },
   { to: '/shiftboard',    label: 'Shifts',   icon: OpenShiftIcon },
 ];
-const SHARED_ADMIN_NAV = [
-  { to: '/scheduler', label: 'T&A',   icon: ClockIcon },
-  { to: '/admin',     label: 'Admin', icon: GridIcon  },
-];
-const MANAGER_NAV = [
-  { to: '/staff/manage', label: 'Staff', icon: StaffIcon },
+const ADMIN_NAV = [
+  { to: '/scheduler',    label: 'T&A',   icon: ClockIcon  },
+  { to: '/staff/manage', label: 'Staff', icon: StaffIcon  },
+  { to: '/admin',        label: 'Admin', icon: GridIcon   },
 ];
 const SYSADMIN_NAV = [
   { to: '/sysadmin/users', label: 'System', icon: ShieldIcon },
@@ -25,8 +23,8 @@ export default function Sidebar() {
   const navigate = useNavigate();
 
   const items =
-    user?.role === 'sysadmin' ? [...NAV, ...SHARED_ADMIN_NAV, ...SYSADMIN_NAV] :
-    user?.role === 'manager'  ? [...NAV, ...SHARED_ADMIN_NAV, ...MANAGER_NAV] :
+    user?.role === 'sysadmin' ? [...NAV, ...ADMIN_NAV, ...SYSADMIN_NAV] :
+    user?.role === 'manager'  ? [...NAV, ...ADMIN_NAV] :
     NAV;
 
   return (

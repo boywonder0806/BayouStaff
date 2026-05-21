@@ -91,7 +91,7 @@ function AppRoutes() {
         <Route
           path="staff"
           element={
-            <ProtectedRoute managerOnly>
+            <ProtectedRoute adminOnly>
               <StaffLayout />
             </ProtectedRoute>
           }
