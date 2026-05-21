@@ -6,7 +6,6 @@ const NAV = [
   { to: '/schedule',      label: 'Schedule', icon: CalIcon       },
   { to: '/messages',      label: 'Messages', icon: MsgIcon       },
   { to: '/announcements', label: 'Board',    icon: BroadcastIcon },
-  { to: '/timeoff',       label: 'T.Off',    icon: TimeOffIcon   },
   { to: '/shiftboard',    label: 'Shifts',   icon: OpenShiftIcon },
 ];
 const ADMIN_NAV = [
