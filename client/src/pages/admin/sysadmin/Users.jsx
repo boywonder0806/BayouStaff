@@ -24,10 +24,8 @@ export default function SysAdminUsers() {
   const { user: me } = useAuth();
   const [staff, setStaff]           = useState([]);
   const [selected, setSelected]     = useState(null);
-  const [creating, setCreating]     = useState(false);
-  const [search, setSearch]         = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
-  const [deptFilter, setDeptFilter] = useState('all');
+  const [creating, setCreating] = useState(false);
+  const [search, setSearch]     = useState('');
 
   useEffect(() => {
     api.get('/admin/employees')
@@ -40,33 +38,16 @@ export default function SysAdminUsers() {
     if (selected?.id === userId) setSelected(s => ({ ...s, role: newRole }));
   }
 
-  const counts = ROLES.reduce((acc, r) => {
-    acc[r.value] = staff.filter(s => s.role === r.value).length;
-    return acc;
-  }, {});
-
-  const visible = staff.filter(s => {
-    if (roleFilter !== 'all' && s.role !== roleFilter) return false;
-    if (deptFilter !== 'all' && !(s.departments ?? [s.department]).includes(deptFilter)) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return (
-        s.name.toLowerCase().includes(q) ||
-        s.email.toLowerCase().includes(q) ||
-        s.position?.toLowerCase().includes(q) ||
-        s.department?.toLowerCase().includes(q)
-      );
-    }
-    return true;
-  });
-
-  const isFiltered = search || roleFilter !== 'all' || deptFilter !== 'all';
-
-  function clearFilters() {
-    setSearch('');
-    setRoleFilter('all');
-    setDeptFilter('all');
-  }
+  const visible = search
+    ? staff.filter(s => {
+        const q = search.toLowerCase();
+        return (
+          s.name.toLowerCase().includes(q) ||
+          s.email.toLowerCase().includes(q) ||
+          s.position?.toLowerCase().includes(q)
+        );
+      })
+    : staff;
 
   return (
     <div className="flex flex-col gap-5" style={{ height: 'calc(100vh - 3rem)' }}>
@@ -80,12 +61,6 @@ export default function SysAdminUsers() {
           </h1>
         </div>
         <div className="flex items-center gap-3 pb-1">
-          {ROLES.map(r => (
-            <div key={r.value} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-10 font-bold tracking-widest uppercase ${r.style}`}>
-              <span className="text-lg font-heading font-black leading-none">{counts[r.value] ?? 0}</span>
-              {r.label}
-            </div>
-          ))}
           <button
             onClick={() => setCreating(true)}
             className="btn-primary flex items-center gap-2 text-xs"
@@ -99,86 +74,26 @@ export default function SysAdminUsers() {
       <div className="flex-1 min-h-0">
         <div className="panel p-5 h-full flex flex-col gap-4 min-h-0">
 
-          {/* Search + count */}
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-fog pointer-events-none">
-                <SearchIcon />
-              </span>
-              <input
-                type="text"
-                className="field pl-9 pr-9 text-sm"
-                placeholder="Search by name, email, position, or department…"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-fog hover:text-ink transition-colors"
-                >
-                  <XIcon />
-                </button>
-              )}
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-10 text-fog whitespace-nowrap">
-                {isFiltered ? `${visible.length} of ${staff.length}` : `${staff.length} total`}
-              </span>
-              {isFiltered && (
-                <button
-                  onClick={clearFilters}
-                  className="text-10 font-bold tracking-widest uppercase text-cyan hover:text-cyan-light transition-colors"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Filter rows */}
-          <div className="flex flex-col gap-2 shrink-0">
-            {/* Role filter */}
-            <div className="flex items-center gap-2">
-              <span className="label-xs w-16 shrink-0">Role</span>
-              <div className="flex gap-1.5 flex-wrap">
-                <FilterPill
-                  label="All"
-                  active={roleFilter === 'all'}
-                  onClick={() => setRoleFilter('all')}
-                />
-                {ROLES.map(r => (
-                  <FilterPill
-                    key={r.value}
-                    label={r.label}
-                    active={roleFilter === r.value}
-                    activeClass={r.active}
-                    onClick={() => setRoleFilter(roleFilter === r.value ? 'all' : r.value)}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Department filter */}
-            <div className="flex items-center gap-2">
-              <span className="label-xs w-16 shrink-0">Dept</span>
-              <div className="flex gap-1.5 flex-wrap">
-                <FilterPill
-                  label="All"
-                  active={deptFilter === 'all'}
-                  onClick={() => setDeptFilter('all')}
-                />
-                {DEPT_FILTERS.map(dept => (
-                  <FilterPill
-                    key={dept}
-                    label={dept}
-                    active={deptFilter === dept}
-                    activeClass={DEPT_PILL[dept]}
-                    onClick={() => setDeptFilter(deptFilter === dept ? 'all' : dept)}
-                  />
-                ))}
-              </div>
-            </div>
+          {/* Search */}
+          <div className="relative shrink-0">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-fog pointer-events-none">
+              <SearchIcon />
+            </span>
+            <input
+              type="text"
+              className="field pl-9 pr-9 text-sm w-full"
+              placeholder="Search by name, email, or position…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-fog hover:text-ink transition-colors"
+              >
+                <XIcon />
+              </button>
+            )}
           </div>
 
           {/* Divider */}
@@ -188,9 +103,9 @@ export default function SysAdminUsers() {
           <div className="flex-1 overflow-y-auto space-y-2 pr-1">
             {visible.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-32 gap-2">
-                <p className="text-fog text-sm">No users match your search or filters.</p>
-                <button onClick={clearFilters} className="text-10 font-bold tracking-widest uppercase text-cyan hover:text-cyan-light transition-colors">
-                  Clear filters
+                <p className="text-fog text-sm">No users match your search.</p>
+                <button onClick={() => setSearch('')} className="text-10 font-bold tracking-widest uppercase text-cyan hover:text-cyan-light transition-colors">
+                  Clear
                 </button>
               </div>
             ) : (
