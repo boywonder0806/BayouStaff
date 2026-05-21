@@ -8,8 +8,7 @@ import Messages from './pages/Messages.jsx';
 import Announcements from './pages/Announcements.jsx';
 import AdminDashboard from './pages/admin/Dashboard.jsx';
 import SchedulerLayout from './pages/admin/SchedulerLayout.jsx';
-import CurrentSchedule from './pages/admin/scheduler/CurrentSchedule.jsx';
-import PlanSchedule from './pages/admin/scheduler/PlanSchedule.jsx';
+import Schedule from './pages/admin/scheduler/Schedule.jsx';
 import ShiftAssignments from './pages/admin/scheduler/ShiftAssignments.jsx';
 import SystemAdminLayout from './pages/admin/SystemAdminLayout.jsx';
 import SysAdminUsers from './pages/admin/sysadmin/Users.jsx';
@@ -68,9 +67,8 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="current" replace />} />
-          <Route path="current"     element={<CurrentSchedule />} />
-          <Route path="plan"        element={<PlanSchedule />} />
+          <Route index element={<Navigate to="schedule" replace />} />
+          <Route path="schedule"    element={<Schedule />} />
           <Route path="assignments" element={<ShiftAssignments />} />
         </Route>
         <Route
