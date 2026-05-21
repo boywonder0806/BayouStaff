@@ -18,17 +18,17 @@ import SysAdminLogs from './pages/admin/sysadmin/Logs.jsx';
 import SysAdminAPI from './pages/admin/sysadmin/API.jsx';
 import SysAdminCertifications from './pages/admin/sysadmin/Certifications.jsx';
 import StaffLayout from './pages/admin/StaffLayout.jsx';
-import TimeOffAdmin from './pages/admin/staff/TimeOffAdmin.jsx';
-import OpenShiftsAdmin from './pages/admin/staff/OpenShiftsAdmin.jsx';
+import ManageStaff from './pages/admin/staff/ManageStaff.jsx';
 import TimeOff from './pages/TimeOff.jsx';
 import ShiftBoard from './pages/ShiftBoard.jsx';
 
-function ProtectedRoute({ children, adminOnly = false, sysadminOnly = false }) {
+function ProtectedRoute({ children, adminOnly = false, sysadminOnly = false, managerOnly = false }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="flex items-center justify-center h-screen text-bb-muted">Loading…</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (sysadminOnly && user.role !== 'sysadmin') return <Navigate to="/home" replace />;
   if (adminOnly && user.role !== 'manager' && user.role !== 'sysadmin') return <Navigate to="/home" replace />;
+  if (managerOnly && user.role !== 'manager') return <Navigate to="/home" replace />;
   return children;
 }
 
@@ -91,14 +91,13 @@ function AppRoutes() {
         <Route
           path="staff"
           element={
-            <ProtectedRoute adminOnly>
+            <ProtectedRoute managerOnly>
               <StaffLayout />
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="timeoff" replace />} />
-          <Route path="timeoff"    element={<TimeOffAdmin />} />
-          <Route path="openShifts" element={<OpenShiftsAdmin />} />
+          <Route index element={<Navigate to="manage" replace />} />
+          <Route path="manage" element={<ManageStaff />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
