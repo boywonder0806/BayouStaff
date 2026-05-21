@@ -287,7 +287,7 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate }) {
               <Field label="Phone"       value={user.phone ?? '—'} />
               <Field label="Department"  value={user.department} />
               <Field label="Position"    value={user.position} />
-              <Field label="Employee ID" value={`#${String(user.id).padStart(4, '0')}`} />
+              <Field label="Netchex ID"  value={`#${user.id}`} />
               <Field label="Hire Date"   value={user.hireDate ? format(parseISO(user.hireDate), 'MMMM d, yyyy') : '—'} />
             </div>
           </div>
@@ -455,7 +455,7 @@ const MGMT_ROLES = ROLES.filter(r => r.value === 'manager' || r.value === 'sysad
 
 function CreateUserModal({ onClose, onCreated }) {
   const backdropRef = useRef(null);
-  const [form, setForm]     = useState({ name: '', email: '', password: '', role: 'manager', phone: '', position: '' });
+  const [form, setForm]     = useState({ id: '', name: '', email: '', password: '', role: 'manager', phone: '', position: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
 
@@ -471,22 +471,24 @@ function CreateUserModal({ onClose, onCreated }) {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
-    if (!form.name.trim() || !form.email.trim() || !form.password) {
-      setError('Name, email, and password are required.'); return;
+    if (!form.id || !form.name.trim() || !form.email.trim() || !form.password) {
+      setError('Netchex ID, name, email, and password are required.'); return;
     }
+    if (isNaN(parseInt(form.id))) { setError('Netchex Employee ID must be a number.'); return; }
     if (form.password.length < 6) { setError('Password must be at least 6 characters.'); return; }
     setSaving(true);
     try {
       const { data } = await api.post('/admin/sysadmin/users', {
-        name:       form.name.trim(),
-        email:      form.email.trim().toLowerCase(),
-        password:   form.password,
-        role:       form.role,
-        department: 'Management',
+        id:          parseInt(form.id),
+        name:        form.name.trim(),
+        email:       form.email.trim().toLowerCase(),
+        password:    form.password,
+        role:        form.role,
+        department:  'Management',
         departments: ['Management'],
-        position:   form.position.trim() || null,
-        phone:      form.phone.trim() || null,
-        avatar:     autoAvatar(form.name),
+        position:    form.position.trim() || null,
+        phone:       form.phone.trim() || null,
+        avatar:      autoAvatar(form.name),
       });
       onCreated(data.user);
     } catch (err) {
@@ -522,6 +524,20 @@ function CreateUserModal({ onClose, onCreated }) {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-7 space-y-5">
+
+          {/* Netchex ID */}
+          <div>
+            <label className="label-xs block mb-2">Netchex Employee ID *</label>
+            <input
+              className="field text-sm"
+              type="number"
+              placeholder="e.g. 100234"
+              value={form.id}
+              onChange={set('id')}
+              required
+            />
+            <p className="text-10 text-fog mt-1.5">Found in Netchex under the employee's profile. Used to match clock-in/out data.</p>
+          </div>
 
           {/* Role selector */}
           <div>
