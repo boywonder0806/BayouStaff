@@ -410,22 +410,22 @@ router.get('/sysadmin/users', requireSysAdmin, async (_req, res) => {
 });
 
 router.post('/sysadmin/users', requireSysAdmin, async (req, res) => {
-  const { id, email, password, name, role, department, departments, position, avatar, phone, hireDate } = req.body;
-  if (!id || !email || !password || !name) {
-    return res.status(400).json({ error: 'Netchex employee ID, email, password, and name are required.' });
+  const { email, password, name, role, department, departments, position, avatar, phone, hireDate } = req.body;
+  if (!email || !password || !name) {
+    return res.status(400).json({ error: 'email, password, and name are required.' });
   }
   try {
     const hash = await bcrypt.hash(password, 10);
     const { rows } = await pool.query(
-      `INSERT INTO employees (id,email,password_hash,name,role,department,departments,position,avatar,phone,hire_date)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      `INSERT INTO employees (email,password_hash,name,role,department,departments,position,avatar,phone,hire_date)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        RETURNING id, email, name, role, department, departments, position, avatar, phone, hire_date AS "hireDate"`,
-      [parseInt(id), email.toLowerCase().trim(), hash, name, role||'crew_member',
+      [email.toLowerCase().trim(), hash, name, role||'crew_member',
        department||null, departments||[], position||null, avatar||null, phone||null, hireDate||null]
     );
     res.status(201).json({ user: rows[0] });
   } catch (err) {
-    if (err.code === '23505') return res.status(409).json({ error: 'Email or employee ID already exists.' });
+    if (err.code === '23505') return res.status(409).json({ error: 'Email already exists.' });
     res.status(500).json({ error: 'Failed to create user' });
   }
 });

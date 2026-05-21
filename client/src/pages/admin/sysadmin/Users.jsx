@@ -317,51 +317,53 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate }) {
             </div>
           </div>
 
-          {/* Department Access */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <p className="label-xs">Department Access</p>
-              <div className="flex items-center gap-1.5">
-                {deptSaving && <span className="text-10 text-fog animate-pulse">Saving…</span>}
-                <span className="text-10 text-fog">Primary: <span className="text-fog-hi font-semibold">{user.department}</span></span>
+          {/* Department Access — crew members only */}
+          {user.role === 'crew_member' && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="label-xs">Department Access</p>
+                <div className="flex items-center gap-1.5">
+                  {deptSaving && <span className="text-10 text-fog animate-pulse">Saving…</span>}
+                  <span className="text-10 text-fog">Primary: <span className="text-fog-hi font-semibold">{user.department}</span></span>
+                </div>
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {ALL_DEPARTMENTS.map(dept => {
-                const isActive  = activeDepts.includes(dept);
-                const isPrimary = dept === user.department;
-                const ds = DEPT_STYLE[dept];
-                return (
-                  <button
-                    key={dept}
-                    onClick={() => handleDeptToggle(dept)}
-                    disabled={deptSaving || isPrimary}
-                    title={isPrimary ? 'Primary department — cannot remove' : undefined}
-                    className={`flex items-center justify-between px-3 py-2.5 rounded-lg border text-xs font-semibold transition-all
-                      ${isActive ? ds.active : 'bg-shell/20 ' + ds.inactive}
-                      ${isPrimary ? 'cursor-default opacity-80' : deptSaving ? 'opacity-50 cursor-wait' : 'cursor-pointer'}
-                    `}
-                  >
-                    <span>{dept}</span>
-                    <span className="flex items-center gap-1.5 shrink-0 ml-2">
-                      {isPrimary && <span className="text-10 tracking-widest uppercase opacity-60">primary</span>}
-                      <span className={`w-4 h-4 rounded border flex items-center justify-center transition-colors
-                        ${isActive ? 'border-current bg-current/20' : 'border-current/30'}`}>
-                        {isActive && (
-                          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2} className="w-2.5 h-2.5">
-                            <polyline points="2 6 5 9 10 3" />
-                          </svg>
-                        )}
+              <div className="grid grid-cols-2 gap-2">
+                {ALL_DEPARTMENTS.map(dept => {
+                  const isActive  = activeDepts.includes(dept);
+                  const isPrimary = dept === user.department;
+                  const ds = DEPT_STYLE[dept];
+                  return (
+                    <button
+                      key={dept}
+                      onClick={() => handleDeptToggle(dept)}
+                      disabled={deptSaving || isPrimary}
+                      title={isPrimary ? 'Primary department — cannot remove' : undefined}
+                      className={`flex items-center justify-between px-3 py-2.5 rounded-lg border text-xs font-semibold transition-all
+                        ${isActive ? ds.active : 'bg-shell/20 ' + ds.inactive}
+                        ${isPrimary ? 'cursor-default opacity-80' : deptSaving ? 'opacity-50 cursor-wait' : 'cursor-pointer'}
+                      `}
+                    >
+                      <span>{dept}</span>
+                      <span className="flex items-center gap-1.5 shrink-0 ml-2">
+                        {isPrimary && <span className="text-10 tracking-widest uppercase opacity-60">primary</span>}
+                        <span className={`w-4 h-4 rounded border flex items-center justify-center transition-colors
+                          ${isActive ? 'border-current bg-current/20' : 'border-current/30'}`}>
+                          {isActive && (
+                            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2} className="w-2.5 h-2.5">
+                              <polyline points="2 6 5 9 10 3" />
+                            </svg>
+                          )}
+                        </span>
                       </span>
-                    </span>
-                  </button>
-                );
-              })}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-10 text-fog mt-2">
+                Cross-trained departments give access to restricted content for those areas.
+              </p>
             </div>
-            <p className="text-10 text-fog mt-2">
-              Cross-trained departments give access to restricted content for those areas.
-            </p>
-          </div>
+          )}
 
           {/* Actions */}
           <div>
@@ -369,7 +371,7 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate }) {
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-shell/40 border border-rim/40 rounded-xl p-4">
                 <p className="text-xs font-semibold text-ink mb-1">Reset Password</p>
-                <p className="text-10 text-fog mb-3">Set a new password for this account.</p>
+                <p className="text-10 text-fog mb-3">Set a new temporary password for this account.</p>
                 {!pwMode ? (
                   <button onClick={() => { setPwMode(true); setPwSuccess(false); setPwError(''); }}
                     className="btn-ghost border border-rim/60 rounded-md w-full text-xs">
@@ -401,10 +403,12 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate }) {
                   className="btn-ghost border border-rim/60 rounded-md w-full text-xs text-left px-3">
                   Send Message
                 </button>
-                <button onClick={() => navigate('/schedule')}
-                  className="btn-ghost border border-rim/60 rounded-md w-full text-xs text-left px-3">
-                  View Schedule
-                </button>
+                {user.role === 'crew_member' && (
+                  <button onClick={() => navigate('/schedule')}
+                    className="btn-ghost border border-rim/60 rounded-md w-full text-xs text-left px-3">
+                    View Schedule
+                  </button>
+                )}
               </div>
             </div>
 
@@ -455,7 +459,7 @@ const MGMT_ROLES = ROLES.filter(r => r.value === 'manager' || r.value === 'sysad
 
 function CreateUserModal({ onClose, onCreated }) {
   const backdropRef = useRef(null);
-  const [form, setForm]     = useState({ id: '', name: '', email: '', password: '', role: 'manager', phone: '', position: '' });
+  const [form, setForm]     = useState({ name: '', email: '', password: '', role: 'manager', phone: '', position: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
 
@@ -471,15 +475,13 @@ function CreateUserModal({ onClose, onCreated }) {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
-    if (!form.id || !form.name.trim() || !form.email.trim() || !form.password) {
-      setError('Netchex ID, name, email, and password are required.'); return;
+    if (!form.name.trim() || !form.email.trim() || !form.password) {
+      setError('Name, email, and password are required.'); return;
     }
-    if (isNaN(parseInt(form.id))) { setError('Netchex Employee ID must be a number.'); return; }
     if (form.password.length < 6) { setError('Password must be at least 6 characters.'); return; }
     setSaving(true);
     try {
       const { data } = await api.post('/admin/sysadmin/users', {
-        id:          parseInt(form.id),
         name:        form.name.trim(),
         email:       form.email.trim().toLowerCase(),
         password:    form.password,
@@ -524,20 +526,6 @@ function CreateUserModal({ onClose, onCreated }) {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-7 space-y-5">
-
-          {/* Netchex ID */}
-          <div>
-            <label className="label-xs block mb-2">Netchex Employee ID *</label>
-            <input
-              className="field text-sm"
-              type="number"
-              placeholder="e.g. 100234"
-              value={form.id}
-              onChange={set('id')}
-              required
-            />
-            <p className="text-10 text-fog mt-1.5">Found in Netchex under the employee's profile. Used to match clock-in/out data.</p>
-          </div>
 
           {/* Role selector */}
           <div>
