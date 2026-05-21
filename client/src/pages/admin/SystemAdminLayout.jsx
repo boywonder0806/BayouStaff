@@ -13,7 +13,7 @@ export default function SystemAdminLayout() {
     <div className="flex -mx-6 -mt-6 -mb-6" style={{ height: '100vh' }}>
 
       {/* Sub-sidebar */}
-      <aside className="group/subnav w-[56px] hover:w-[100px] transition-[width] duration-200 ease-out shrink-0 flex flex-col bg-[#030A12] border-r border-rim/30 overflow-hidden">
+      <aside className="group/subnav w-[60px] hover:w-[88px] transition-[width] duration-200 ease-out shrink-0 flex flex-col bg-[#030A12] border-r border-rim/30 overflow-hidden">
         <div className="flex items-center justify-center h-12 shrink-0 border-b border-rim/20">
           <span className="text-10 font-black tracking-widest uppercase text-gold whitespace-nowrap opacity-0 group-hover/subnav:opacity-100 transition-opacity duration-150 delay-75">
             System
