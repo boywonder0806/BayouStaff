@@ -101,7 +101,7 @@ router.patch('/employees/:id/password', requireAdmin, async (req, res) => {
   }
 });
 
-const VALID_DEPARTMENTS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew'];
+const VALID_DEPARTMENTS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew', 'Management'];
 router.patch('/employees/:id/role', requireSysAdmin, async (req, res) => {
   const { role } = req.body;
   if (!['crew_member', 'manager', 'sysadmin'].includes(role)) {

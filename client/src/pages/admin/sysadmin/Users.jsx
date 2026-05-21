@@ -207,10 +207,10 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate }) {
   }
 
   async function handleDeptToggle(dept) {
-    const isPrimary = dept === user.department;
+    const isManager = user.role === 'manager' || user.role === 'sysadmin';
     let next;
     if (activeDepts.includes(dept)) {
-      if (isPrimary || activeDepts.length === 1) return; // can't remove primary or last
+      if (!isManager && (dept === user.department || activeDepts.length === 1)) return;
       next = activeDepts.filter(d => d !== dept);
     } else {
       next = [...activeDepts, dept];
@@ -316,6 +316,35 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate }) {
               ))}
             </div>
           </div>
+
+          {/* Permissions — managers only */}
+          {user.role === 'manager' && (
+            <PermissionsPanel
+              user={user}
+              activeDepts={activeDepts}
+              deptSaving={deptSaving}
+              onToggle={handleDeptToggle}
+            />
+          )}
+
+          {/* Permissions — sysadmin full access indicator */}
+          {user.role === 'sysadmin' && (
+            <div>
+              <p className="label-xs mb-3">Department Permissions</p>
+              <div className="bg-gold/5 border border-gold/20 rounded-xl px-4 py-3 flex items-center gap-3">
+                <span className="text-gold">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    <polyline points="9 12 11 14 15 10" />
+                  </svg>
+                </span>
+                <div>
+                  <p className="text-xs font-semibold text-gold">Full Access — All Departments</p>
+                  <p className="text-10 text-fog mt-0.5">System Administrators have unrestricted access to view and edit all departments.</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Department Access — crew members only */}
           {user.role === 'crew_member' && (
@@ -450,6 +479,68 @@ function Field({ label, value }) {
     <div>
       <p className="label-xs mb-1">{label}</p>
       <p className="text-sm text-ink font-semibold">{value}</p>
+    </div>
+  );
+}
+
+// ── Permissions Panel ─────────────────────────────────────────────────────────
+const ALL_PERMISSION_DEPTS = [
+  { name: 'Aquatics',        color: 'aq',   desc: 'Lifeguards, wave pool, slides, lazy river' },
+  { name: 'Food & Beverage', color: 'fb',   desc: 'Concessions, snack shacks, catering' },
+  { name: 'Guest Services',  color: 'gs',   desc: 'Main entrance, cabana rentals, info desk' },
+  { name: 'Cleaning Crew',   color: 'cc',   desc: 'Park maintenance and sanitation' },
+  { name: 'Management',      color: 'mgmt', desc: 'Managerial staff and park-wide operations' },
+];
+
+function PermissionsPanel({ user, activeDepts, deptSaving, onToggle }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <p className="label-xs">Department Permissions</p>
+          <p className="text-10 text-fog mt-0.5">Controls which departments this manager can view and edit.</p>
+        </div>
+        {deptSaving && <span className="text-10 text-fog animate-pulse shrink-0">Saving…</span>}
+      </div>
+      <div className="space-y-2">
+        {ALL_PERMISSION_DEPTS.map(dept => {
+          const isActive = activeDepts.includes(dept.name);
+          return (
+            <button
+              key={dept.name}
+              onClick={() => onToggle(dept.name)}
+              disabled={deptSaving}
+              className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl border text-left transition-all
+                ${isActive
+                  ? `bg-${dept.color}/10 border-${dept.color}/30`
+                  : 'bg-shell/20 border-rim/40 hover:border-rim/80'
+                }
+                ${deptSaving ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
+            >
+              {/* Toggle */}
+              <div className={`w-8 h-5 rounded-full transition-all shrink-0 relative ${isActive ? `bg-${dept.color}/70` : 'bg-rim/60'}`}>
+                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all
+                  ${isActive ? 'left-3.5' : 'left-0.5'}`}
+                />
+              </div>
+              {/* Info */}
+              <div className="flex-1 min-w-0">
+                <p className={`text-xs font-semibold ${isActive ? `text-${dept.color}` : 'text-fog-hi'}`}>
+                  {dept.name}
+                </p>
+                <p className="text-10 text-fog mt-0.5">{dept.desc}</p>
+              </div>
+              {/* Badge */}
+              <span className={`shrink-0 text-10 font-bold tracking-widest uppercase px-2.5 py-1 rounded-full border transition-all
+                ${isActive
+                  ? `bg-${dept.color}/10 border-${dept.color}/30 text-${dept.color}`
+                  : 'bg-transparent border-rim/40 text-fog'}`}>
+                {isActive ? 'Enabled' : 'No Access'}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
