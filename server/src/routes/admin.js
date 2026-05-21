@@ -102,6 +102,24 @@ router.patch('/employees/:id/password', requireAdmin, async (req, res) => {
 });
 
 const VALID_DEPARTMENTS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew'];
+router.patch('/employees/:id/role', requireSysAdmin, async (req, res) => {
+  const { role } = req.body;
+  if (!['crew_member', 'manager', 'sysadmin'].includes(role)) {
+    return res.status(400).json({ error: 'Invalid role.' });
+  }
+  try {
+    const { rows } = await pool.query(
+      `UPDATE employees SET role = $1 WHERE id = $2
+       RETURNING id, email, name, role, department, departments, position, avatar, phone`,
+      [role, parseInt(req.params.id)]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'User not found' });
+    res.json({ user: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update role' });
+  }
+});
+
 router.patch('/employees/:id/departments', requireAdmin, async (req, res) => {
   const { departments } = req.body;
   if (!Array.isArray(departments)) {

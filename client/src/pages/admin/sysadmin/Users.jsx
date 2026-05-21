@@ -22,9 +22,10 @@ const DEPT_PILL = {
 
 export default function SysAdminUsers() {
   const { user: me } = useAuth();
-  const [staff, setStaff]         = useState([]);
-  const [selected, setSelected]   = useState(null);
-  const [search, setSearch]       = useState('');
+  const [staff, setStaff]           = useState([]);
+  const [selected, setSelected]     = useState(null);
+  const [creating, setCreating]     = useState(false);
+  const [search, setSearch]         = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [deptFilter, setDeptFilter] = useState('all');
 
@@ -78,13 +79,19 @@ export default function SysAdminUsers() {
             User Management
           </h1>
         </div>
-        <div className="flex gap-2 pb-1">
+        <div className="flex items-center gap-3 pb-1">
           {ROLES.map(r => (
             <div key={r.value} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-10 font-bold tracking-widest uppercase ${r.style}`}>
               <span className="text-lg font-heading font-black leading-none">{counts[r.value] ?? 0}</span>
               {r.label}
             </div>
           ))}
+          <button
+            onClick={() => setCreating(true)}
+            className="btn-primary flex items-center gap-2 text-xs"
+          >
+            <PlusIcon /> New User
+          </button>
         </div>
       </div>
 
@@ -230,6 +237,13 @@ export default function SysAdminUsers() {
           isSelf={selected.id === me?.id}
           onClose={() => setSelected(null)}
           onRoleUpdate={handleRoleUpdate}
+        />
+      )}
+
+      {creating && (
+        <CreateUserModal
+          onClose={() => setCreating(false)}
+          onCreated={u => { setStaff(prev => [...prev, u].sort((a, b) => a.name.localeCompare(b.name))); setCreating(false); }}
         />
       )}
     </div>
@@ -521,6 +535,154 @@ function Field({ label, value }) {
   );
 }
 
+// ── Create User Modal ─────────────────────────────────────────────────────────
+const MGMT_ROLES = ROLES.filter(r => r.value === 'manager' || r.value === 'sysadmin');
+
+function CreateUserModal({ onClose, onCreated }) {
+  const backdropRef = useRef(null);
+  const [form, setForm]     = useState({ name: '', email: '', password: '', role: 'manager', phone: '', position: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+
+  function handleBackdrop(e) { if (e.target === backdropRef.current) onClose(); }
+  function set(field) { return e => setForm(f => ({ ...f, [field]: e.target.value })); }
+
+  function autoAvatar(name) {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    if (!form.name.trim() || !form.email.trim() || !form.password) {
+      setError('Name, email, and password are required.'); return;
+    }
+    if (form.password.length < 6) { setError('Password must be at least 6 characters.'); return; }
+    setSaving(true);
+    try {
+      const { data } = await api.post('/admin/sysadmin/users', {
+        name:       form.name.trim(),
+        email:      form.email.trim().toLowerCase(),
+        password:   form.password,
+        role:       form.role,
+        department: 'Management',
+        departments: ['Management'],
+        position:   form.position.trim() || null,
+        phone:      form.phone.trim() || null,
+        avatar:     autoAvatar(form.name),
+      });
+      onCreated(data.user);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to create user.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const selectedRole = MGMT_ROLES.find(r => r.value === form.role);
+
+  return (
+    <div
+      ref={backdropRef}
+      onClick={handleBackdrop}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-void/70 backdrop-blur-sm"
+    >
+      <div className="w-full max-w-lg mx-4 bg-deep border border-rim/60 rounded-2xl shadow-2xl overflow-hidden">
+
+        {/* Header */}
+        <div className="bg-shell/60 border-b border-rim/40 px-7 py-5 flex items-center justify-between">
+          <div>
+            <p className="label-xs mb-1">System Admin / Users</p>
+            <h2 className="font-heading font-black text-ink text-xl leading-none">New Management Account</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-shell hover:bg-rim/60 border border-rim/60 flex items-center justify-center text-fog hover:text-ink transition-colors"
+          >
+            <CloseIcon />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-7 space-y-5">
+
+          {/* Role selector */}
+          <div>
+            <p className="label-xs mb-3">Access Level</p>
+            <div className="flex gap-2">
+              {MGMT_ROLES.map(r => (
+                <button
+                  key={r.value}
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, role: r.value }))}
+                  className={`flex-1 py-3 px-4 rounded-xl border text-xs font-bold tracking-wide transition-all
+                    ${form.role === r.value
+                      ? r.active + ' ring-1 ring-inset ring-current/30'
+                      : 'bg-shell/40 border-rim/50 text-fog hover:border-rim hover:text-fog-hi'
+                    }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-10 text-fog mt-2">
+              {form.role === 'sysadmin'
+                ? 'Full access to all system settings, user management, and all departments.'
+                : 'Access to scheduling, staff management, and assigned departments.'}
+            </p>
+          </div>
+
+          {/* Name + Email */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label-xs block mb-2">Full Name *</label>
+              <input className="field text-sm" placeholder="Jane Smith" value={form.name} onChange={set('name')} required />
+            </div>
+            <div>
+              <label className="label-xs block mb-2">Email *</label>
+              <input className="field text-sm" type="email" placeholder="jane@bluebayou.com" value={form.email} onChange={set('email')} required />
+            </div>
+          </div>
+
+          {/* Position + Phone */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label-xs block mb-2">Position</label>
+              <input className="field text-sm" placeholder="e.g. Shift Manager" value={form.position} onChange={set('position')} />
+            </div>
+            <div>
+              <label className="label-xs block mb-2">Phone</label>
+              <input className="field text-sm" placeholder="(225) 555-0100" value={form.phone} onChange={set('phone')} />
+            </div>
+          </div>
+
+          {/* Password */}
+          <div>
+            <label className="label-xs block mb-2">Temporary Password *</label>
+            <input className="field text-sm" type="password" placeholder="Min. 6 characters" value={form.password} onChange={set('password')} required />
+            <p className="text-10 text-fog mt-1.5">The user should change this after their first login.</p>
+          </div>
+
+          {error && <p className="text-xs text-red-400 font-semibold">{error}</p>}
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 btn-ghost border border-rim/60 rounded-md text-sm">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving}
+              className={`flex-1 btn-primary text-sm ${selectedRole?.value === 'sysadmin' ? 'bg-gold hover:bg-gold-dark text-void' : ''}`}>
+              {saving ? 'Creating…' : 'Create Account'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function CloseIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
@@ -549,6 +711,14 @@ function XIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3.5 h-3.5">
       <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3.5 h-3.5">
+      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
     </svg>
   );
 }
