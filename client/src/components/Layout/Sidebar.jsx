@@ -8,12 +8,11 @@ const NAV = [
   { to: '/announcements', label: 'Board',    icon: BroadcastIcon },
   { to: '/timeoff',       label: 'T.Off',    icon: TimeOffIcon   },
   { to: '/shiftboard',    label: 'Shifts',   icon: OpenShiftIcon },
-  { to: '/timecards',     label: 'Clock',    icon: ClockIcon     },
 ];
 const ADMIN_NAV = [
-  { to: '/admin',          label: 'Admin',  icon: GridIcon      },
-  { to: '/scheduler',      label: 'Sched',  icon: SchedulerIcon },
+  { to: '/scheduler',      label: 'T&A',    icon: ClockIcon     },
   { to: '/staff/timeoff',  label: 'Staff',  icon: StaffIcon     },
+  { to: '/admin',          label: 'Admin',  icon: GridIcon      },
 ];
 const SYSADMIN_NAV = [
   { to: '/sysadmin/users', label: 'System', icon: ShieldIcon },
@@ -151,6 +150,14 @@ function SchedulerIcon() {
     </svg>
   );
 }
+function ClockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-full h-full">
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="12 7 12 12 15 15" />
+    </svg>
+  );
+}
 function GridIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-full h-full">
@@ -192,14 +199,6 @@ function OpenShiftIcon() {
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <line x1="3" y1="9" x2="21" y2="9" />
       <line x1="9" y1="9" x2="9" y2="21" />
-    </svg>
-  );
-}
-function ClockIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-full h-full">
-      <circle cx="12" cy="12" r="9" />
-      <polyline points="12 7 12 12 15 15" />
     </svg>
   );
 }

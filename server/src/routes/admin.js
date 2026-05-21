@@ -594,49 +594,6 @@ router.delete('/open-shifts/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// ── Timecards (Admin) ─────────────────────────────────────────────────────────
-router.get('/timecards', requireAdmin, async (req, res) => {
-  const depts = managerDepts(req);
-  const fromDate = req.query.from || new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
-  const toDate   = req.query.to   || new Date().toISOString().slice(0, 10);
-  try {
-    const { rows } = depts
-      ? await pool.query(
-          `SELECT tc.id, tc.employee_id AS "employeeId", e.name AS "employeeName", e.avatar,
-                  tc.clock_in AS "clockIn", tc.clock_out AS "clockOut", tc.date::text, tc.notes, tc.status
-           FROM timecards tc JOIN employees e ON e.id = tc.employee_id
-           WHERE tc.date >= $1 AND tc.date <= $2 AND e.departments && $3::text[]
-           ORDER BY tc.clock_in DESC`,
-          [fromDate, toDate, depts]
-        )
-      : await pool.query(
-          `SELECT tc.id, tc.employee_id AS "employeeId", e.name AS "employeeName", e.avatar,
-                  tc.clock_in AS "clockIn", tc.clock_out AS "clockOut", tc.date::text, tc.notes, tc.status
-           FROM timecards tc JOIN employees e ON e.id = tc.employee_id
-           WHERE tc.date >= $1 AND tc.date <= $2
-           ORDER BY tc.clock_in DESC`,
-          [fromDate, toDate]
-        );
-    res.json({ timecards: rows });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch timecards' });
-  }
-});
-
-router.patch('/timecards/:id/approve', requireAdmin, async (req, res) => {
-  try {
-    const { rows } = await pool.query(
-      `UPDATE timecards SET status = 'approved', approved_by = $1, approved_at = NOW()
-       WHERE id = $2 RETURNING id, status`,
-      [req.user.id, parseInt(req.params.id)]
-    );
-    if (!rows[0]) return res.status(404).json({ error: 'Not found' });
-    res.json({ timecard: rows[0] });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to approve timecard' });
-  }
-});
-
 // ── Certifications ────────────────────────────────────────────────────────────
 router.get('/certifications', requireAdmin, async (_req, res) => {
   try {

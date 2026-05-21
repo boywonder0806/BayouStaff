@@ -11,7 +11,6 @@ import announcementsRouter from './routes/announcements.js';
 import autoScheduleRouter from './routes/autoschedule.js';
 import timeOffRouter from './routes/timeoff.js';
 import shiftBoardRouter from './routes/shiftboard.js';
-import timecardsRouter from './routes/timecards.js';
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -28,7 +27,6 @@ app.use('/api/announcements', announcementsRouter);
 app.use('/api/admin/scheduler/auto-schedule', autoScheduleRouter);
 app.use('/api/time-off',   timeOffRouter);
 app.use('/api/shiftboard', shiftBoardRouter);
-app.use('/api/timecards',  timecardsRouter);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'Blue Bayou Staff API' }));
 

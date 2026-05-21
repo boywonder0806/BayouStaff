@@ -20,10 +20,8 @@ import SysAdminCertifications from './pages/admin/sysadmin/Certifications.jsx';
 import StaffLayout from './pages/admin/StaffLayout.jsx';
 import TimeOffAdmin from './pages/admin/staff/TimeOffAdmin.jsx';
 import OpenShiftsAdmin from './pages/admin/staff/OpenShiftsAdmin.jsx';
-import TimecardsAdmin from './pages/admin/staff/TimecardsAdmin.jsx';
 import TimeOff from './pages/TimeOff.jsx';
 import ShiftBoard from './pages/ShiftBoard.jsx';
-import Timecards from './pages/Timecards.jsx';
 
 function ProtectedRoute({ children, adminOnly = false, sysadminOnly = false }) {
   const { user, loading } = useAuth();
@@ -54,7 +52,6 @@ function AppRoutes() {
         <Route path="announcements" element={<Announcements />} />
         <Route path="timeoff"       element={<TimeOff />} />
         <Route path="shiftboard"    element={<ShiftBoard />} />
-        <Route path="timecards"     element={<Timecards />} />
         <Route
           path="admin"
           element={
@@ -102,7 +99,6 @@ function AppRoutes() {
           <Route index element={<Navigate to="timeoff" replace />} />
           <Route path="timeoff"    element={<TimeOffAdmin />} />
           <Route path="openShifts" element={<OpenShiftsAdmin />} />
-          <Route path="timecards"  element={<TimecardsAdmin />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
