@@ -599,7 +599,7 @@ function CreateUserModal({ onClose, onCreated }) {
       onClick={handleBackdrop}
       className="fixed inset-0 z-50 flex items-center justify-center bg-void/70 backdrop-blur-sm"
     >
-      <div className="w-full max-w-lg mx-4 bg-deep border border-rim/60 rounded-2xl shadow-2xl overflow-hidden">
+      <div className="w-full max-w-3xl mx-4 bg-deep border border-rim/60 rounded-2xl shadow-2xl overflow-hidden">
 
         {/* Header */}
         <div className="bg-shell/60 border-b border-rim/40 px-7 py-5 flex items-center justify-between">
@@ -615,69 +615,83 @@ function CreateUserModal({ onClose, onCreated }) {
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-7 space-y-5">
+        {/* Form — two column layout */}
+        <form onSubmit={handleSubmit} className="p-7">
+          <div className="grid grid-cols-2 gap-x-8 gap-y-5">
 
-          {/* Role selector */}
-          <div>
-            <p className="label-xs mb-3">Access Level</p>
-            <div className="flex gap-2">
-              {MGMT_ROLES.map(r => (
-                <button
-                  key={r.value}
-                  type="button"
-                  onClick={() => setForm(f => ({ ...f, role: r.value }))}
-                  className={`flex-1 py-3 px-4 rounded-xl border text-xs font-bold tracking-wide transition-all
-                    ${form.role === r.value
-                      ? r.active + ' ring-1 ring-inset ring-current/30'
-                      : 'bg-shell/40 border-rim/50 text-fog hover:border-rim hover:text-fog-hi'
-                    }`}
-                >
-                  {r.label}
-                </button>
-              ))}
+            {/* Left column */}
+            <div className="space-y-5">
+
+              {/* Role selector */}
+              <div>
+                <p className="label-xs mb-3">Access Level</p>
+                <div className="flex gap-2">
+                  {MGMT_ROLES.map(r => (
+                    <button
+                      key={r.value}
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, role: r.value }))}
+                      className={`flex-1 py-3 px-4 rounded-xl border text-xs font-bold tracking-wide transition-all
+                        ${form.role === r.value
+                          ? r.active + ' ring-1 ring-inset ring-current/30'
+                          : 'bg-shell/40 border-rim/50 text-fog hover:border-rim hover:text-fog-hi'
+                        }`}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-10 text-fog mt-2">
+                  {form.role === 'sysadmin'
+                    ? 'Full access to all system settings, user management, and all departments.'
+                    : 'Access to scheduling, staff management, and assigned departments.'}
+                </p>
+              </div>
+
+              {/* Name */}
+              <div>
+                <label className="label-xs block mb-2">Full Name *</label>
+                <input className="field text-sm" placeholder="Jane Smith" value={form.name} onChange={set('name')} required />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="label-xs block mb-2">Email *</label>
+                <input className="field text-sm" type="email" placeholder="jane@bluebayou.com" value={form.email} onChange={set('email')} required />
+              </div>
             </div>
-            <p className="text-10 text-fog mt-2">
-              {form.role === 'sysadmin'
-                ? 'Full access to all system settings, user management, and all departments.'
-                : 'Access to scheduling, staff management, and assigned departments.'}
-            </p>
+
+            {/* Right column */}
+            <div className="space-y-5">
+
+              {/* Position */}
+              <div>
+                <label className="label-xs block mb-2">Position</label>
+                <input className="field text-sm" placeholder="e.g. Shift Manager" value={form.position} onChange={set('position')} />
+              </div>
+
+              {/* Phone */}
+              <div>
+                <label className="label-xs block mb-2">Phone</label>
+                <input className="field text-sm" placeholder="(225) 555-0100" value={form.phone} onChange={set('phone')} />
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="label-xs block mb-2">Temporary Password *</label>
+                <input className="field text-sm" type="password" placeholder="Min. 6 characters" value={form.password} onChange={set('password')} required />
+                <p className="text-10 text-fog mt-1.5">User should change this after first login.</p>
+              </div>
+
+            </div>
+            {/* end right column */}
+
           </div>
+          {/* end grid */}
 
-          {/* Name + Email */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label-xs block mb-2">Full Name *</label>
-              <input className="field text-sm" placeholder="Jane Smith" value={form.name} onChange={set('name')} required />
-            </div>
-            <div>
-              <label className="label-xs block mb-2">Email *</label>
-              <input className="field text-sm" type="email" placeholder="jane@bluebayou.com" value={form.email} onChange={set('email')} required />
-            </div>
-          </div>
+          {error && <p className="text-xs text-red-400 font-semibold mt-4">{error}</p>}
 
-          {/* Position + Phone */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label-xs block mb-2">Position</label>
-              <input className="field text-sm" placeholder="e.g. Shift Manager" value={form.position} onChange={set('position')} />
-            </div>
-            <div>
-              <label className="label-xs block mb-2">Phone</label>
-              <input className="field text-sm" placeholder="(225) 555-0100" value={form.phone} onChange={set('phone')} />
-            </div>
-          </div>
-
-          {/* Password */}
-          <div>
-            <label className="label-xs block mb-2">Temporary Password *</label>
-            <input className="field text-sm" type="password" placeholder="Min. 6 characters" value={form.password} onChange={set('password')} required />
-            <p className="text-10 text-fog mt-1.5">The user should change this after their first login.</p>
-          </div>
-
-          {error && <p className="text-xs text-red-400 font-semibold">{error}</p>}
-
-          <div className="flex gap-3 pt-1">
+          <div className="flex gap-3 mt-6">
             <button type="button" onClick={onClose}
               className="flex-1 btn-ghost border border-rim/60 rounded-md text-sm">
               Cancel
