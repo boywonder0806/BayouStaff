@@ -11,6 +11,8 @@ import SchedulerLayout from './pages/admin/SchedulerLayout.jsx';
 import SchedulerView from './pages/admin/scheduler/Schedule.jsx';
 import ShiftAssignments from './pages/admin/scheduler/ShiftAssignments.jsx';
 import Positions from './pages/admin/scheduler/Positions.jsx';
+import NetchexImport from './pages/admin/scheduler/NetchexImport.jsx';
+import DailyAssignments from './pages/admin/scheduler/DailyAssignments.jsx';
 import SystemAdminLayout from './pages/admin/SystemAdminLayout.jsx';
 import SysAdminUsers from './pages/admin/sysadmin/Users.jsx';
 import SysAdminDepartments from './pages/admin/sysadmin/Departments.jsx';
@@ -72,6 +74,8 @@ function AppRoutes() {
           <Route path="schedule"    element={<SchedulerView />} />
           <Route path="assignments" element={<ShiftAssignments />} />
           <Route path="positions"   element={<Positions />} />
+          <Route path="import"      element={<NetchexImport />} />
+          <Route path="board"       element={<DailyAssignments />} />
         </Route>
         <Route
           path="sysadmin"
