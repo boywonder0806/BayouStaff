@@ -8,7 +8,7 @@ import Messages from './pages/Messages.jsx';
 import Announcements from './pages/Announcements.jsx';
 import AdminDashboard from './pages/admin/Dashboard.jsx';
 import SchedulerLayout from './pages/admin/SchedulerLayout.jsx';
-import Schedule from './pages/admin/scheduler/Schedule.jsx';
+import SchedulerView from './pages/admin/scheduler/Schedule.jsx';
 import ShiftAssignments from './pages/admin/scheduler/ShiftAssignments.jsx';
 import Positions from './pages/admin/scheduler/Positions.jsx';
 import SystemAdminLayout from './pages/admin/SystemAdminLayout.jsx';
@@ -69,7 +69,7 @@ function AppRoutes() {
           }
         >
           <Route index element={<Navigate to="schedule" replace />} />
-          <Route path="schedule"    element={<Schedule />} />
+          <Route path="schedule"    element={<SchedulerView />} />
           <Route path="assignments" element={<ShiftAssignments />} />
           <Route path="positions"   element={<Positions />} />
         </Route>
