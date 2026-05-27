@@ -167,8 +167,9 @@ export default function ShiftAssignments() {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  const underStaffedCells = positions.reduce((sum, p) =>
-    sum + weekDates.filter(d => getCell(p.name, d).length < p.minCount).length, 0
+  // Count open (unfilled) slots: each position = 1 slot per day
+  const openSlots = positions.reduce((sum, p) =>
+    sum + weekDates.filter(d => getCell(p.name, d).length === 0).length, 0
   );
 
   const cfg = DEPT_CONFIG[activeDept];
@@ -184,12 +185,12 @@ export default function ShiftAssignments() {
             Shift Assignments
           </h1>
           <div className="flex items-center gap-2 pb-1">
-            {!loading && underStaffedCells > 0 && (
+            {!loading && openSlots > 0 && (
               <span className="text-10 font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-full tracking-widest uppercase">
-                {underStaffedCells} slot{underStaffedCells !== 1 ? 's' : ''} under-staffed
+                {openSlots} open slot{openSlots !== 1 ? 's' : ''}
               </span>
             )}
-            {!loading && underStaffedCells === 0 && positions.length > 0 && (
+            {!loading && openSlots === 0 && positions.length > 0 && (
               <span className="text-10 font-bold text-green-400 bg-green-500/10 border border-green-500/30 px-2.5 py-1 rounded-full tracking-widest uppercase">
                 Fully staffed
               </span>
@@ -288,28 +289,23 @@ export default function ShiftAssignments() {
                 </thead>
                 <tbody>
                   {positions.map((pos, pi) => {
-                    const hasUnder = weekDates.some(d => getCell(pos.name, d).length < pos.minCount);
+                    const hasOpen = weekDates.some(d => getCell(pos.name, d).length === 0);
                     return (
                       <tr key={pos.id} className={`border-b border-rim/20 last:border-0 ${pi % 2 !== 0 ? 'bg-shell/[0.03]' : ''}`}>
 
                         {/* Position label */}
-                        <td
-                          className="py-3 px-4 align-top bg-deep sticky left-0 z-10 border-r border-rim/30"
-                        >
+                        <td className="py-3 px-4 align-top bg-deep sticky left-0 z-10 border-r border-rim/30">
                           <div className="flex flex-col gap-0.5">
                             <span className="font-semibold text-ink text-xs leading-tight">{pos.name}</span>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              {hasUnder
-                                ? <span className="text-[9px] font-bold text-amber-400 tracking-wide">⚠ under</span>
-                                : <span className="text-[9px] text-green-400/60">✓ staffed</span>
+                            <div className="mt-0.5">
+                              {hasOpen
+                                ? <span className="text-[9px] font-bold text-amber-400 tracking-wide">⚠ open</span>
+                                : <span className="text-[9px] text-green-400/60">✓ filled</span>
                               }
-                              <span className="text-[9px] text-fog/40">
-                                {pos.minCount === pos.maxCount ? `×${pos.minCount}` : `${pos.minCount}–${pos.maxCount}`}
-                              </span>
                             </div>
-                            {pos.description && (
-                              <p className="text-[9px] text-fog/50 leading-tight mt-0.5 line-clamp-2 max-w-[145px]">
-                                {pos.description}
+                            {pos.schedulingNotes && (
+                              <p className="text-[9px] text-violet-400/60 leading-tight mt-0.5 line-clamp-2 max-w-[145px]">
+                                {pos.schedulingNotes}
                               </p>
                             )}
                           </div>
@@ -318,14 +314,13 @@ export default function ShiftAssignments() {
                         {/* Day cells */}
                         {weekDates.map(date => {
                           const cellShifts = getCell(pos.name, date);
-                          const count = cellShifts.length;
-                          const isUnder = count < pos.minCount;
-                          const canAdd = count < pos.maxCount;
+                          const isEmpty    = cellShifts.length === 0;
+                          const isFilled   = cellShifts.length >= 1;
 
                           return (
                             <td
                               key={date}
-                              className={`py-2 px-1.5 align-top transition-colors ${isUnder ? 'bg-amber-500/[0.04]' : ''}`}
+                              className={`py-2 px-1.5 align-top transition-colors ${isEmpty ? 'bg-amber-500/[0.04]' : ''}`}
                             >
                               <div className="flex flex-col gap-1">
                                 {cellShifts.map(shift => {
@@ -352,7 +347,7 @@ export default function ShiftAssignments() {
                                         <button
                                           onClick={() => removeAssignment(shift.id)}
                                           className="opacity-0 group-hover:opacity-100 transition-opacity text-fog/60 hover:text-red-400 shrink-0 ml-0.5"
-                                          title="Remove draft assignment"
+                                          title="Remove assignment"
                                         >
                                           <XIcon />
                                         </button>
@@ -361,14 +356,10 @@ export default function ShiftAssignments() {
                                   );
                                 })}
 
-                                {canAdd && (
+                                {isEmpty && (
                                   <button
-                                    onClick={() => setAssigning({ positionName: pos.name, positionId: pos.id, date, minCount: pos.minCount, maxCount: pos.maxCount })}
-                                    className={`flex items-center justify-center gap-0.5 rounded border border-dashed px-1.5 py-1 text-[9px] font-semibold tracking-wide transition-colors
-                                      ${isUnder && count === 0
-                                        ? 'border-amber-500/40 text-amber-400/60 hover:bg-amber-500/10 hover:text-amber-400'
-                                        : 'border-rim/25 text-fog/35 hover:bg-shell hover:text-fog/70 hover:border-rim/50'
-                                      }`}
+                                    onClick={() => setAssigning({ positionName: pos.name, positionId: pos.id, date })}
+                                    className="flex items-center justify-center gap-0.5 rounded border border-dashed px-1.5 py-1 text-[9px] font-semibold tracking-wide transition-colors border-amber-500/40 text-amber-400/60 hover:bg-amber-500/10 hover:text-amber-400"
                                   >
                                     <PlusIcon />
                                     Assign

@@ -68,7 +68,7 @@ export default function SysAdminDepartments() {
     try {
       const { data } = await api.post(
         `/admin/departments/${encodeURIComponent(deptName)}/roles`,
-        { name: trimmed, type: 'position', minCount: 1, maxCount: 1 }
+        { name: trimmed, type: 'position' }
       );
       setAllEntries(prev => [...prev, data.role]);
     } catch (err) {
@@ -162,20 +162,23 @@ export default function SysAdminDepartments() {
               </div>
             </div>
 
+            {/* AI notes callout */}
+            <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-violet-500/8 border border-violet-500/20">
+              <SparkleIcon className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-fog-hi leading-relaxed">
+                Each position is <span className="text-ink font-semibold">one slot per day</span>. Add{' '}
+                <span className="text-violet-300 font-semibold">scheduling notes</span> to any position and the
+                auto-scheduler will treat them as hard constraints — shift times, early cuts, demand patterns, and more.
+              </p>
+            </div>
+
             {loading ? (
               <p className="text-fog text-sm py-4 text-center">Loading…</p>
             ) : (
               <div className="flex flex-col gap-3">
 
-                {/* Column headers */}
-                {dept.positions.length > 0 && (
-                  <div className="grid grid-cols-[2rem_1fr_5rem_5rem_2.5rem] gap-2 px-4 items-center">
-                    <span />
-                    <span className="text-10 text-fog uppercase tracking-widest">Position</span>
-                    <span className="text-10 text-fog uppercase tracking-widest text-center">Min</span>
-                    <span className="text-10 text-fog uppercase tracking-widest text-center">Max</span>
-                    <span />
-                  </div>
+                {dept.positions.length === 0 && (
+                  <p className="text-fog text-sm py-3 text-center">No positions yet — add one below.</p>
                 )}
 
                 {dept.positions.map((entry, idx) => (
@@ -189,10 +192,6 @@ export default function SysAdminDepartments() {
                   />
                 ))}
 
-                {dept.positions.length === 0 && (
-                  <p className="text-fog text-sm py-3 text-center">No positions yet — add one below.</p>
-                )}
-
                 <AddEntryInput dept={dept} onAdd={name => addPosition(dept.name, name)} />
               </div>
             )}
@@ -205,18 +204,14 @@ export default function SysAdminDepartments() {
 
 // ── Entry row ─────────────────────────────────────────────────────────────────
 function EntryRow({ entry, index, dept, onUpdate, onDelete }) {
-  const [editing, setEditing]     = useState(false);
-  const [name, setName]           = useState(entry.name);
-  const [description, setDesc]    = useState(entry.description ?? '');
-  const [minCount, setMin]        = useState(entry.minCount ?? 1);
-  const [maxCount, setMax]        = useState(entry.maxCount ?? 1);
+  const [editing, setEditing]           = useState(false);
+  const [name, setName]                 = useState(entry.name);
+  const [schedulingNotes, setNotes]     = useState(entry.schedulingNotes ?? '');
   const nameRef = useRef(null);
 
   useEffect(() => {
     setName(entry.name);
-    setDesc(entry.description ?? '');
-    setMin(entry.minCount ?? 1);
-    setMax(entry.maxCount ?? 1);
+    setNotes(entry.schedulingNotes ?? '');
   }, [entry]);
 
   useEffect(() => { if (editing) nameRef.current?.focus(); }, [editing]);
@@ -224,17 +219,13 @@ function EntryRow({ entry, index, dept, onUpdate, onDelete }) {
   function commit() {
     const trimmed = name.trim();
     if (!trimmed) { setName(entry.name); setEditing(false); return; }
-    const safeMin = Math.max(1, parseInt(minCount) || 1);
-    const safeMax = Math.max(safeMin, parseInt(maxCount) || 1);
-    onUpdate({ name: trimmed, description: description.trim() || null, minCount: safeMin, maxCount: safeMax });
+    onUpdate({ name: trimmed, schedulingNotes: schedulingNotes.trim() || null });
     setEditing(false);
   }
 
   function cancel() {
     setName(entry.name);
-    setDesc(entry.description ?? '');
-    setMin(entry.minCount ?? 1);
-    setMax(entry.maxCount ?? 1);
+    setNotes(entry.schedulingNotes ?? '');
     setEditing(false);
   }
 
@@ -253,43 +244,27 @@ function EntryRow({ entry, index, dept, onUpdate, onDelete }) {
           />
         </div>
 
-        <div className="pl-7 flex flex-col gap-2">
-          <textarea
-            className="field text-xs resize-none w-full"
-            rows={2}
-            placeholder="Description — what does this position do? (used by auto-schedule)"
-            value={description}
-            onChange={e => setDesc(e.target.value)}
-          />
-
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <label className="text-10 text-fog uppercase tracking-widest whitespace-nowrap">Min per shift</label>
-              <input
-                type="number" min={1} max={99}
-                className="field text-sm w-16 text-center"
-                value={minCount}
-                onChange={e => {
-                  const v = Math.max(1, parseInt(e.target.value) || 1);
-                  setMin(v);
-                  if (maxCount < v) setMax(v);
-                }}
-              />
+        <div className="pl-7 flex flex-col gap-3">
+          <div>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <SparkleIcon className="w-3 h-3 text-violet-400" />
+              <label className="text-10 text-violet-300 uppercase tracking-widest font-bold">Scheduling Notes</label>
             </div>
-            <div className="flex items-center gap-2">
-              <label className="text-10 text-fog uppercase tracking-widest whitespace-nowrap">Max per shift</label>
-              <input
-                type="number" min={minCount} max={99}
-                className="field text-sm w-16 text-center"
-                value={maxCount}
-                onChange={e => setMax(Math.max(minCount, parseInt(e.target.value) || minCount))}
-              />
-            </div>
+            <textarea
+              className="field text-xs resize-none w-full leading-relaxed"
+              rows={3}
+              placeholder="Describe scheduling requirements for this position. e.g. 'Typically cut early in the afternoon once guest demand drops. On weekends, start at 8:45 AM instead of 9 AM.' The auto-scheduler reads these as binding instructions."
+              value={schedulingNotes}
+              onChange={e => setNotes(e.target.value)}
+            />
           </div>
 
           <div className="flex gap-2 justify-end pt-1">
             <button onClick={cancel} className="btn-ghost text-xs px-3 py-1.5">Cancel</button>
-            <button onClick={commit} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${dept.bgClass} ${dept.borderClass} ${dept.colorClass} hover:opacity-80`}>
+            <button
+              onClick={commit}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${dept.bgClass} ${dept.borderClass} ${dept.colorClass} hover:opacity-80`}
+            >
               Save
             </button>
           </div>
@@ -298,53 +273,49 @@ function EntryRow({ entry, index, dept, onUpdate, onDelete }) {
     );
   }
 
+  const hasNotes = !!entry.schedulingNotes?.trim();
+
   return (
     <div
-      className="grid grid-cols-[2rem_1fr_5rem_5rem_2.5rem] gap-2 px-4 py-3 rounded-xl border items-start transition-all group
-        bg-shell/40 border-rim/40 hover:border-rim/70 hover:bg-shell/60"
+      className="rounded-xl border px-4 py-3.5 transition-all group bg-shell/40 border-rim/40 hover:border-rim/70 hover:bg-shell/60"
     >
-      <span className="text-10 text-fog font-mono text-center pt-0.5 shrink-0">{String(index).padStart(2, '0')}</span>
+      <div className="flex items-start gap-3">
+        <span className="text-10 text-fog font-mono text-center pt-0.5 shrink-0 w-5">{String(index).padStart(2, '0')}</span>
 
-      <button
-        className="text-left"
-        onClick={() => setEditing(true)}
-      >
-        <p className="text-sm font-semibold text-ink leading-snug">{entry.name}</p>
-        {entry.description && (
-          <p className="text-10 text-fog mt-0.5 leading-relaxed">{entry.description}</p>
-        )}
-        {!entry.description && (
-          <p className="text-10 text-fog/40 mt-0.5 italic opacity-0 group-hover:opacity-100 transition-opacity">
-            Add description…
-          </p>
-        )}
-      </button>
+        <button className="flex-1 text-left min-w-0" onClick={() => setEditing(true)}>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-ink leading-snug">{entry.name}</p>
+            <span className="text-10 text-fog/40 border border-rim/30 rounded px-1.5 py-0.5 shrink-0">1 slot</span>
+          </div>
 
-      <div className="flex flex-col items-center gap-0.5">
-        <span className="text-sm font-bold text-ink tabular-nums">{entry.minCount ?? 1}</span>
-        <span className="text-10 text-fog/50">min</span>
-      </div>
-
-      <div className="flex flex-col items-center gap-0.5">
-        <span className="text-sm font-bold text-ink tabular-nums">{entry.maxCount ?? 1}</span>
-        <span className="text-10 text-fog/50">max</span>
-      </div>
-
-      <div className="flex flex-col items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pt-0.5">
-        <button
-          onClick={() => setEditing(true)}
-          className="p-1 rounded-md text-fog hover:text-fog-hi hover:bg-shell transition-colors"
-          title="Edit"
-        >
-          <PencilIcon />
+          {hasNotes ? (
+            <div className="flex items-start gap-1.5 mt-1.5">
+              <SparkleIcon className="w-3 h-3 text-violet-400 shrink-0 mt-0.5" />
+              <p className="text-10 text-fog leading-relaxed line-clamp-2">{entry.schedulingNotes}</p>
+            </div>
+          ) : (
+            <p className="text-10 text-fog/30 mt-1 italic opacity-0 group-hover:opacity-100 transition-opacity">
+              Add scheduling notes…
+            </p>
+          )}
         </button>
-        <button
-          onClick={onDelete}
-          className="p-1 rounded-md text-fog hover:text-red-400 hover:bg-red-500/10 transition-colors"
-          title="Delete"
-        >
-          <TrashIcon />
-        </button>
+
+        <div className="flex flex-col items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pt-0.5 shrink-0">
+          <button
+            onClick={() => setEditing(true)}
+            className="p-1 rounded-md text-fog hover:text-fog-hi hover:bg-shell transition-colors"
+            title="Edit"
+          >
+            <PencilIcon />
+          </button>
+          <button
+            onClick={onDelete}
+            className="p-1 rounded-md text-fog hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            title="Delete"
+          >
+            <TrashIcon />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -425,6 +396,13 @@ function DescriptionEditor({ value, onChange }) {
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
+function SparkleIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
+    </svg>
+  );
+}
 function PencilIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">

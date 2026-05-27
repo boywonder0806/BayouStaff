@@ -770,8 +770,7 @@ router.post('/sysadmin/users', requireSysAdmin, async (req, res) => {
 router.get('/departments/roles', requireAdmin, async (_req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, department, name, type, sort_order, description,
-              min_count AS "minCount", max_count AS "maxCount"
+      `SELECT id, department, name, type, sort_order, description AS "schedulingNotes"
        FROM department_roles ORDER BY department, type, sort_order, id`
     );
     res.json({ roles: rows });
@@ -781,7 +780,7 @@ router.get('/departments/roles', requireAdmin, async (_req, res) => {
 });
 
 router.post('/departments/:dept/roles', requireAdmin, async (req, res) => {
-  const { name, type = 'role', description, minCount = 1, maxCount = 1 } = req.body;
+  const { name, type = 'role', schedulingNotes } = req.body;
   const department = decodeURIComponent(req.params.dept);
   if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
   if (!['role', 'position'].includes(type)) return res.status(400).json({ error: 'type must be role or position' });
@@ -790,11 +789,9 @@ router.post('/departments/:dept/roles', requireAdmin, async (req, res) => {
       `INSERT INTO department_roles (department, name, type, sort_order, description, min_count, max_count)
        VALUES ($1, $2, $3,
          (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM department_roles WHERE department = $1 AND type = $3),
-         $4, $5, $6)
-       RETURNING id, department, name, type, sort_order, description,
-                 min_count AS "minCount", max_count AS "maxCount"`,
-      [department, name.trim(), type, description || null,
-       Math.max(1, parseInt(minCount) || 1), Math.max(1, parseInt(maxCount) || 1)]
+         $4, 1, 1)
+       RETURNING id, department, name, type, sort_order, description AS "schedulingNotes"`,
+      [department, name.trim(), type, schedulingNotes?.trim() || null]
     );
     res.status(201).json({ role: rows[0] });
   } catch (err) {
@@ -804,20 +801,15 @@ router.post('/departments/:dept/roles', requireAdmin, async (req, res) => {
 });
 
 router.patch('/departments/roles/:id', requireAdmin, async (req, res) => {
-  const { name, description, minCount, maxCount } = req.body;
+  const { name, schedulingNotes } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
   try {
     const { rows } = await pool.query(
       `UPDATE department_roles
-       SET name = $1, description = $2,
-           min_count = $3, max_count = $4
-       WHERE id = $5
-       RETURNING id, department, name, type, sort_order, description,
-                 min_count AS "minCount", max_count AS "maxCount"`,
-      [name.trim(), description ?? null,
-       Math.max(1, parseInt(minCount) || 1),
-       Math.max(parseInt(minCount) || 1, parseInt(maxCount) || 1),
-       parseInt(req.params.id)]
+       SET name = $1, description = $2
+       WHERE id = $3
+       RETURNING id, department, name, type, sort_order, description AS "schedulingNotes"`,
+      [name.trim(), schedulingNotes?.trim() ?? null, parseInt(req.params.id)]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Not found' });
     res.json({ role: rows[0] });
