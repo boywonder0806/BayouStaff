@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import api from '../../../../lib/api.js';
+import api from '../../../lib/api.js';
 
 const FILTERS = ['all', 'info', 'warn', 'error'];
 
