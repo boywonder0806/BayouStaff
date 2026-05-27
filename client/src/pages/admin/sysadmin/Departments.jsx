@@ -278,30 +278,26 @@ function EntryRow({ entry, index, dept, onUpdate, onDelete, onDuplicate }) {
 
   return (
     <div
-      className="rounded-xl border px-4 py-3.5 transition-all group bg-shell/40 border-rim/40 hover:border-rim/70 hover:bg-shell/60"
+      className="rounded-lg border px-3 py-2 transition-all group bg-shell/40 border-rim/40 hover:border-rim/70 hover:bg-shell/60"
     >
-      <div className="flex items-start gap-3">
-        <span className="text-10 text-fog font-mono text-center pt-0.5 shrink-0 w-5">{String(index).padStart(2, '0')}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-10 text-fog font-mono shrink-0 w-4 text-center">{String(index).padStart(2, '0')}</span>
 
-        <button className="flex-1 text-left min-w-0" onClick={() => setEditing(true)}>
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold text-ink leading-snug">{entry.name}</p>
-            <span className="text-10 text-fog/40 border border-rim/30 rounded px-1.5 py-0.5 shrink-0">1 slot</span>
-          </div>
-
+        <button className="flex-1 text-left min-w-0 flex items-center gap-2" onClick={() => setEditing(true)}>
+          <p className="text-xs font-semibold text-ink leading-none">{entry.name}</p>
           {hasNotes ? (
-            <div className="flex items-start gap-1.5 mt-1.5">
-              <SparkleIcon className="w-3 h-3 text-violet-400 shrink-0 mt-0.5" />
-              <p className="text-10 text-fog leading-relaxed line-clamp-2">{entry.schedulingNotes}</p>
+            <div className="flex items-center gap-1 min-w-0">
+              <SparkleIcon className="w-2.5 h-2.5 text-violet-400 shrink-0" />
+              <p className="text-10 text-fog truncate">{entry.schedulingNotes}</p>
             </div>
           ) : (
-            <p className="text-10 text-fog/30 mt-1 italic opacity-0 group-hover:opacity-100 transition-opacity">
-              Add scheduling notes…
+            <p className="text-10 text-fog/30 italic opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+              Add notes…
             </p>
           )}
         </button>
 
-        <div className="flex flex-col items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pt-0.5 shrink-0">
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
           <button
             onClick={() => setEditing(true)}
             className="p-1 rounded-md text-fog hover:text-fog-hi hover:bg-shell transition-colors"
