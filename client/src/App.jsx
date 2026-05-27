@@ -20,7 +20,6 @@ import SysAdminAPI from './pages/admin/sysadmin/API.jsx';
 import ManageStaff from './pages/admin/staff/ManageStaff.jsx';
 import StaffProfile from './pages/admin/staff/StaffProfile.jsx';
 import TimeOff from './pages/TimeOff.jsx';
-import Weather from './pages/Weather.jsx';
 import ShiftBoard from './pages/ShiftBoard.jsx';
 import ChangePassword from './pages/ChangePassword.jsx';
 
@@ -63,7 +62,6 @@ function AppRoutes() {
         <Route path="messages"      element={<Messages />} />
         <Route path="announcements" element={<Announcements />} />
         <Route path="timeoff"       element={<TimeOff />} />
-        <Route path="weather"       element={<Weather />} />
         <Route path="shiftboard"    element={<ShiftBoard />} />
         <Route
           path="scheduler"
