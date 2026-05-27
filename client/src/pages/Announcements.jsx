@@ -76,11 +76,10 @@ export default function Announcements() {
         )}
       </div>
 
-      {/* Department filter */}
+      {/* Department filter — crew members only see their own departments */}
       <div className="flex items-center gap-2 shrink-0 flex-wrap">
         <FilterPill label="All" active={deptFilter === 'all'} onClick={() => setDeptFilter('all')} />
-        <FilterPill label="General" active={deptFilter === 'general'} onClick={() => setDeptFilter('general')} />
-        {DEPARTMENTS.map(d => (
+        {(isManager ? DEPARTMENTS : DEPARTMENTS.filter(d => user?.departments?.includes(d))).map(d => (
           <FilterPill
             key={d}
             label={d}

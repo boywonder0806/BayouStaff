@@ -7,15 +7,48 @@ const router = Router();
 // GET /api/announcements
 router.get('/', requireAuth, async (req, res) => {
   const { department } = req.query;
+  const isCrew = req.user.role === 'crew_member';
+  const userDepts = req.user.departments || [];
+
   try {
-    const { rows } = await pool.query(
-      `SELECT id, title, body, author_name AS "author", author_avatar AS "authorAvatar",
-              department, priority, date::text
-       FROM announcements
-       ${department && department !== 'all' ? 'WHERE department = $1 OR department IS NULL' : ''}
-       ORDER BY date DESC, created_at DESC`,
-      department && department !== 'all' ? [department] : []
-    );
+    let query, params;
+
+    if (isCrew) {
+      // Crew members only see All Staff + their assigned departments
+      if (department && department !== 'all' && userDepts.includes(department)) {
+        query = `SELECT id, title, body, author_name AS "author", author_avatar AS "authorAvatar",
+                        department, priority, date::text
+                 FROM announcements
+                 WHERE department = $1 OR department IS NULL
+                 ORDER BY date DESC, created_at DESC`;
+        params = [department];
+      } else {
+        query = `SELECT id, title, body, author_name AS "author", author_avatar AS "authorAvatar",
+                        department, priority, date::text
+                 FROM announcements
+                 WHERE department IS NULL OR department = ANY($1::text[])
+                 ORDER BY date DESC, created_at DESC`;
+        params = [userDepts];
+      }
+    } else {
+      // Managers / sysadmins see everything, with optional dept filter
+      if (department && department !== 'all') {
+        query = `SELECT id, title, body, author_name AS "author", author_avatar AS "authorAvatar",
+                        department, priority, date::text
+                 FROM announcements
+                 WHERE department = $1 OR department IS NULL
+                 ORDER BY date DESC, created_at DESC`;
+        params = [department];
+      } else {
+        query = `SELECT id, title, body, author_name AS "author", author_avatar AS "authorAvatar",
+                        department, priority, date::text
+                 FROM announcements
+                 ORDER BY date DESC, created_at DESC`;
+        params = [];
+      }
+    }
+
+    const { rows } = await pool.query(query, params);
     res.json({ announcements: rows });
   } catch (err) {
     console.error('Announcements error:', err.message);
@@ -36,11 +69,20 @@ router.get('/home', requireAuth, async (req, res) => {
          ORDER BY date, start_time LIMIT 10`,
         [employeeId, today]
       ),
-      pool.query(
-        `SELECT id, title, body, author_name AS "author", author_avatar AS "authorAvatar",
-                department, priority, date::text
-         FROM announcements ORDER BY date DESC, created_at DESC LIMIT 4`
-      ),
+      req.user.role === 'crew_member'
+        ? pool.query(
+            `SELECT id, title, body, author_name AS "author", author_avatar AS "authorAvatar",
+                    department, priority, date::text
+             FROM announcements
+             WHERE department IS NULL OR department = ANY($1::text[])
+             ORDER BY date DESC, created_at DESC LIMIT 4`,
+            [req.user.departments || []]
+          )
+        : pool.query(
+            `SELECT id, title, body, author_name AS "author", author_avatar AS "authorAvatar",
+                    department, priority, date::text
+             FROM announcements ORDER BY date DESC, created_at DESC LIMIT 4`
+          ),
     ]);
     const allShifts = shiftsRes.rows;
     res.json({
