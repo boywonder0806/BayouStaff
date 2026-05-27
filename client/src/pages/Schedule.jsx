@@ -112,14 +112,20 @@ export default function Schedule() {
                       <div className="space-y-2 flex-1">
                         {ds.map(s => {
                           const dc = DEPT_COLOR[s.department];
+                          const isPending = s.status === 'pending';
                           return (
                             <button
-                              key={s.id}
+                              key={`${s.status}-${s.id}`}
                               onClick={() => setSelected(s)}
-                              className="relative w-full text-left rounded-lg p-2 pl-3 bg-deep overflow-hidden hover:bg-shell transition-colors"
+                              className={`relative w-full text-left rounded-lg p-2 pl-3 overflow-hidden transition-colors ${isPending ? 'bg-deep/60 hover:bg-shell/60 opacity-80' : 'bg-deep hover:bg-shell'}`}
                             >
-                              <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-lg ${dc?.bar ?? 'bg-cyan'}`} />
-                              <p className="text-10 text-fog font-semibold truncate">{s.department}</p>
+                              <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-lg ${isPending ? 'opacity-50' : ''} ${dc?.bar ?? 'bg-cyan'}`} />
+                              <div className="flex items-center gap-1.5 mb-0.5">
+                                <p className="text-10 text-fog font-semibold truncate">{s.department}</p>
+                                {isPending && (
+                                  <span className="text-[8px] font-bold tracking-widest uppercase text-amber-400/80 border border-amber-500/30 px-1 rounded shrink-0">Pending</span>
+                                )}
+                              </div>
                               <p className="text-xs font-bold text-ink leading-snug">{fmt12(s.start)}</p>
                               <p className="text-10 text-fog leading-snug">– {fmt12(s.end)}</p>
                               {s.position && (
@@ -169,7 +175,7 @@ export default function Schedule() {
                               ds.map(s => {
                                 const dc = DEPT_COLOR[s.department];
                                 return (
-                                  <div key={s.id} className={`h-1.5 rounded-full ${dc?.bar ?? 'bg-cyan'}`} />
+                                  <div key={`${s.status}-${s.id}`} className={`h-1.5 rounded-full ${s.status === 'pending' ? 'opacity-50' : ''} ${dc?.bar ?? 'bg-cyan'}`} />
                                 );
                               })
                             )}
@@ -195,7 +201,8 @@ export default function Schedule() {
 }
 
 function ShiftModal({ shift, onClose }) {
-  const dc = DEPT_COLOR[shift.department];
+  const dc        = DEPT_COLOR[shift.department];
+  const isPending = shift.status === 'pending';
 
   const [sh, sm] = shift.start.split(':').map(Number);
   const [eh, em] = shift.end.split(':').map(Number);
@@ -216,9 +223,16 @@ function ShiftModal({ shift, onClose }) {
           <div className={`absolute left-0 top-0 bottom-0 w-1 ${dc?.bar ?? 'bg-cyan'}`} />
           <div className="flex items-start justify-between">
             <div>
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-10 font-bold tracking-widest uppercase border bg-shell/60 ${dc?.ring ?? 'border-cyan/20'} ${dc?.text ?? 'text-cyan'}`}>
-                {shift.department}
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-10 font-bold tracking-widest uppercase border bg-shell/60 ${dc?.ring ?? 'border-cyan/20'} ${dc?.text ?? 'text-cyan'}`}>
+                  {shift.department}
+                </span>
+                {isPending && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-10 font-bold tracking-widest uppercase border bg-amber-500/10 border-amber-500/30 text-amber-400">
+                    Pending
+                  </span>
+                )}
+              </div>
               <p className="font-heading font-black text-ink text-xl leading-tight mt-2">
                 {format(parseISO(shift.date), 'EEEE, MMMM d')}
               </p>

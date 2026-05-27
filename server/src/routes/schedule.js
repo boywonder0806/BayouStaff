@@ -30,15 +30,33 @@ router.get('/', requireAuth, async (req, res) => {
   }
 
   try {
-    const { rows } = await pool.query(
-      `SELECT id, employee_id AS "employeeId", date::text, start_time AS start, end_time AS end,
-              department, position, location, notes
-       FROM shifts
-       WHERE employee_id = $1 AND date >= $2 AND date <= $3
-       ORDER BY date, start_time`,
-      [employeeId, startStr, endStr]
+    const [pubRes, draftRes] = await Promise.all([
+      pool.query(
+        `SELECT id, employee_id AS "employeeId", date::text, start_time AS start, end_time AS end,
+                department, position, location, notes, 'published' AS status
+         FROM shifts
+         WHERE employee_id = $1 AND date >= $2 AND date <= $3
+         ORDER BY date, start_time`,
+        [employeeId, startStr, endStr]
+      ),
+      pool.query(
+        `SELECT id, employee_id AS "employeeId", date::text, start_time AS start, end_time AS end,
+                department, position, location, notes, 'pending' AS status
+         FROM draft_shifts
+         WHERE employee_id = $1 AND date >= $2 AND date <= $3
+         ORDER BY date, start_time`,
+        [employeeId, startStr, endStr]
+      ),
+    ]);
+
+    // Deduplicate: if same emp+date+start exists in both, prefer published
+    const pubKeys = new Set(pubRes.rows.map(s => `${s.date}-${s.start}`));
+    const drafts  = draftRes.rows.filter(s => !pubKeys.has(`${s.date}-${s.start}`));
+    const shifts  = [...pubRes.rows, ...drafts].sort(
+      (a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start)
     );
-    res.json({ startDate: startStr, endDate: endStr, shifts: rows });
+
+    res.json({ startDate: startStr, endDate: endStr, shifts });
   } catch (err) {
     console.error('Schedule fetch error:', err.message);
     res.status(500).json({ error: 'Failed to fetch schedule' });
@@ -50,15 +68,30 @@ router.get('/upcoming', requireAuth, async (req, res) => {
   const employeeId = req.user.id;
   const today = new Date().toISOString().slice(0, 10);
   try {
-    const { rows } = await pool.query(
-      `SELECT id, employee_id AS "employeeId", date::text, start_time AS start, end_time AS end,
-              department, position, location, notes
-       FROM shifts
-       WHERE employee_id = $1 AND date >= $2
-       ORDER BY date, start_time LIMIT 10`,
-      [employeeId, today]
-    );
-    res.json({ shifts: rows });
+    const [pubRes, draftRes] = await Promise.all([
+      pool.query(
+        `SELECT id, employee_id AS "employeeId", date::text, start_time AS start, end_time AS end,
+                department, position, location, notes, 'published' AS status
+         FROM shifts
+         WHERE employee_id = $1 AND date >= $2
+         ORDER BY date, start_time LIMIT 10`,
+        [employeeId, today]
+      ),
+      pool.query(
+        `SELECT id, employee_id AS "employeeId", date::text, start_time AS start, end_time AS end,
+                department, position, location, notes, 'pending' AS status
+         FROM draft_shifts
+         WHERE employee_id = $1 AND date >= $2
+         ORDER BY date, start_time LIMIT 10`,
+        [employeeId, today]
+      ),
+    ]);
+    const pubKeys = new Set(pubRes.rows.map(s => `${s.date}-${s.start}`));
+    const drafts  = draftRes.rows.filter(s => !pubKeys.has(`${s.date}-${s.start}`));
+    const shifts  = [...pubRes.rows, ...drafts]
+      .sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start))
+      .slice(0, 10);
+    res.json({ shifts });
   } catch (err) {
     console.error('Upcoming shifts error:', err.message);
     res.status(500).json({ error: 'Failed to fetch upcoming shifts' });
