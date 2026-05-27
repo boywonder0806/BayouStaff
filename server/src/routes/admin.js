@@ -396,6 +396,25 @@ router.post('/staff/:id/notes', requireAdmin, async (req, res) => {
   }
 });
 
+// GET /api/admin/logs — all activity logs for sysadmin view
+router.get('/logs', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT l.id, l.event, l.details, l.ip_address AS "ipAddress",
+              l.created_at AS "createdAt",
+              e.name AS "employeeName", e.email AS "employeeEmail", e.avatar AS "employeeAvatar",
+              a.name AS "actorName"
+       FROM activity_logs l
+       LEFT JOIN employees e ON e.id = l.employee_id
+       LEFT JOIN employees a ON a.id = l.actor_id
+       ORDER BY l.created_at DESC LIMIT 200`
+    );
+    res.json({ logs: rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch logs' });
+  }
+});
+
 router.get('/staff/:id/logs', requireAdmin, async (req, res) => {
   const empId = parseInt(req.params.id);
   try {

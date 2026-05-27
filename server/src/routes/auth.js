@@ -45,6 +45,15 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// POST /api/auth/logout
+router.post('/logout', requireAuth, async (req, res) => {
+  pool.query(
+    `INSERT INTO activity_logs (employee_id, event, ip_address) VALUES ($1, 'Logout', $2)`,
+    [req.user.id, req.ip || null]
+  ).catch(() => {});
+  res.json({ ok: true });
+});
+
 // GET /api/auth/me
 router.get('/me', requireAuth, (req, res) => {
   const { iat, exp, ...user } = req.user;
