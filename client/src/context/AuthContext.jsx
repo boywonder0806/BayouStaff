@@ -23,13 +23,18 @@ export function AuthProvider({ children }) {
     return data.user;
   }
 
+  function updateUser(token, updatedUser) {
+    localStorage.setItem('bb_token', token);
+    setUser(updatedUser);
+  }
+
   function logout() {
     localStorage.removeItem('bb_token');
     setUser(null);
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

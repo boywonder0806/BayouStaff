@@ -1,0 +1,759 @@
+import { useState, useEffect } from 'react';
+import { format, parseISO } from 'date-fns';
+import api from '../lib/api.js';
+import { DEPT_COLOR } from './Layout/Sidebar.jsx';
+
+const DEPARTMENTS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew'];
+
+const DEPT_PILL = {
+  'Aquatics':        'bg-aq/10 border-aq/30 text-aq',
+  'Guest Services':  'bg-gs/10 border-gs/30 text-gs',
+  'Food & Beverage': 'bg-fb/10 border-fb/30 text-fb',
+  'Cleaning Crew':   'bg-cc/10 border-cc/30 text-cc',
+  'Management':      'bg-mgmt/10 border-mgmt/30 text-mgmt',
+};
+
+const DEPT_AVATAR = {
+  'Aquatics':        'border-aq/50 text-aq',
+  'Guest Services':  'border-gs/50 text-gs',
+  'Food & Beverage': 'border-fb/50 text-fb',
+  'Cleaning Crew':   'border-cc/50 text-cc',
+  'Management':      'border-mgmt/50 text-mgmt',
+};
+
+const TABS = [
+  { id: 'info',     label: 'Info' },
+  { id: 'schedule', label: 'Schedule' },
+  { id: 'timeoff',  label: 'Time Off' },
+  { id: 'notes',    label: 'Notes' },
+  { id: 'account',  label: 'Account' },
+];
+
+// ── Main shared component ─────────────────────────────────────────────────────
+// onClose: null = no close button | fn = show close button
+// popoutHref: null = already in popup (hide button) | string = show popout link
+export default function StaffProfileContent({ emp, onUpdated, currentUser, onClose, popoutHref }) {
+  const [tab, setTab] = useState('info');
+
+  // Info tab
+  const [editMode, setEditMode]     = useState(false);
+  const [editForm, setEditForm]     = useState({
+    name:       emp.name,
+    email:      emp.email,
+    phone:      emp.phone ?? '',
+    position:   emp.position ?? '',
+    department: emp.department ?? '',
+    hireDate:   emp.hireDate ? emp.hireDate.slice(0, 10) : '',
+  });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError]   = useState('');
+
+  // Schedule tab
+  const [shifts, setShifts]               = useState([]);
+  const [shiftsLoading, setShiftsLoading] = useState(false);
+  const [shiftsLoaded, setShiftsLoaded]   = useState(false);
+
+  // Time Off tab
+  const [timeoff, setTimeoff]               = useState([]);
+  const [timeoffLoading, setTimeoffLoading] = useState(false);
+  const [timeoffLoaded, setTimeoffLoaded]   = useState(false);
+
+  // Notes tab
+  const [notes, setNotes]               = useState([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [notesLoaded, setNotesLoaded]   = useState(false);
+  const [noteText, setNoteText]         = useState('');
+  const [notesSaving, setNotesSaving]   = useState(false);
+
+  // Account tab
+  const [logs, setLogs]               = useState([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsLoaded, setLogsLoaded]   = useState(false);
+  const [resetPwOpen, setResetPwOpen] = useState(false);
+  const [resetPw, setResetPw]         = useState('');
+  const [resetPwSaving, setResetPwSaving] = useState(false);
+  const [resetPwError, setResetPwError]   = useState('');
+  const [forceSaving, setForceSaving]     = useState(false);
+  const [forceSuccess, setForceSuccess]   = useState(false);
+  const [lockSaving, setLockSaving]       = useState(false);
+  const [statusSaving, setStatusSaving]   = useState(false);
+  const [deactivateConfirm, setDeactivateConfirm] = useState(false);
+
+  const color     = DEPT_COLOR[emp.department];
+  const pillStyle = DEPT_PILL[emp.department] ?? 'bg-rim/20 border-rim/40 text-fog';
+
+  useEffect(() => {
+    if (tab === 'schedule' && !shiftsLoaded) {
+      setShiftsLoading(true);
+      api.get(`/admin/staff/${emp.id}/schedule`)
+        .then(r => { setShifts(r.data.shifts); setShiftsLoaded(true); })
+        .catch(() => setShiftsLoaded(true))
+        .finally(() => setShiftsLoading(false));
+    }
+    if (tab === 'timeoff' && !timeoffLoaded) {
+      setTimeoffLoading(true);
+      api.get(`/admin/staff/${emp.id}/timeoff`)
+        .then(r => { setTimeoff(r.data.requests); setTimeoffLoaded(true); })
+        .catch(() => setTimeoffLoaded(true))
+        .finally(() => setTimeoffLoading(false));
+    }
+    if (tab === 'notes' && !notesLoaded) {
+      setNotesLoading(true);
+      api.get(`/admin/staff/${emp.id}/notes`)
+        .then(r => { setNotes(r.data.notes); setNotesLoaded(true); })
+        .catch(() => setNotesLoaded(true))
+        .finally(() => setNotesLoading(false));
+    }
+    if (tab === 'account' && !logsLoaded) {
+      setLogsLoading(true);
+      api.get(`/admin/staff/${emp.id}/logs`)
+        .then(r => { setLogs(r.data.logs); setLogsLoaded(true); })
+        .catch(() => setLogsLoaded(true))
+        .finally(() => setLogsLoading(false));
+    }
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleSave() {
+    if (!editForm.name.trim()) { setEditError('Name is required.'); return; }
+    setEditSaving(true); setEditError('');
+    try {
+      const { data } = await api.patch(`/admin/staff/${emp.id}`, {
+        name:       editForm.name.trim() || null,
+        email:      editForm.email.trim().toLowerCase() || null,
+        phone:      editForm.phone.trim() || null,
+        position:   editForm.position.trim() || null,
+        department: editForm.department || null,
+        hireDate:   editForm.hireDate || null,
+      });
+      onUpdated(data.employee);
+      setEditMode(false);
+    } catch (err) {
+      setEditError(err.response?.data?.error || 'Failed to save changes.');
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  function cancelEdit() {
+    setEditMode(false); setEditError('');
+    setEditForm({
+      name:       emp.name,
+      email:      emp.email,
+      phone:      emp.phone ?? '',
+      position:   emp.position ?? '',
+      department: emp.department ?? '',
+      hireDate:   emp.hireDate ? emp.hireDate.slice(0, 10) : '',
+    });
+  }
+
+  async function handleAddNote() {
+    if (!noteText.trim()) return;
+    setNotesSaving(true);
+    try {
+      const { data } = await api.post(`/admin/staff/${emp.id}/notes`, { body: noteText.trim() });
+      setNotes(prev => [data.note, ...prev]);
+      setNoteText('');
+    } catch {}
+    finally { setNotesSaving(false); }
+  }
+
+  async function handleResetPassword() {
+    if (resetPw.length < 6) { setResetPwError('Must be at least 6 characters.'); return; }
+    setResetPwSaving(true); setResetPwError('');
+    try {
+      await api.patch(`/admin/employees/${emp.id}/password`, { password: resetPw, forceReset: true });
+      setLogs(prev => [{ id: Date.now(), event: 'Password reset', createdAt: new Date().toISOString(), actorName: currentUser?.name }, ...prev]);
+      setResetPwOpen(false); setResetPw('');
+    } catch (err) {
+      setResetPwError(err.response?.data?.error || 'Failed to reset password.');
+    } finally { setResetPwSaving(false); }
+  }
+
+  async function handleForceReset() {
+    setForceSaving(true);
+    try {
+      await api.patch(`/admin/staff/${emp.id}/force-reset`);
+      setLogs(prev => [{ id: Date.now(), event: 'Password reset required', createdAt: new Date().toISOString(), actorName: currentUser?.name }, ...prev]);
+      setForceSuccess(true);
+      setTimeout(() => setForceSuccess(false), 3000);
+    } catch {}
+    finally { setForceSaving(false); }
+  }
+
+  async function handleLockToggle() {
+    setLockSaving(true);
+    try {
+      await api.patch(`/admin/employees/${emp.id}/lock`, { locked: !emp.isLocked });
+      setLogs(prev => [{ id: Date.now(), event: emp.isLocked ? 'Account unlocked' : 'Account locked', createdAt: new Date().toISOString(), actorName: currentUser?.name }, ...prev]);
+      onUpdated({ ...emp, isLocked: !emp.isLocked });
+    } catch {}
+    finally { setLockSaving(false); }
+  }
+
+  async function handleStatusToggle() {
+    setStatusSaving(true);
+    try {
+      await api.patch(`/admin/staff/${emp.id}/status`, { isActive: !emp.isActive });
+      setLogs(prev => [{ id: Date.now(), event: emp.isActive ? 'Account deactivated' : 'Account reactivated', createdAt: new Date().toISOString(), actorName: currentUser?.name }, ...prev]);
+      onUpdated({ ...emp, isActive: !emp.isActive });
+    } catch {}
+    finally { setStatusSaving(false); setDeactivateConfirm(false); }
+  }
+
+  async function handleDeleteNote(noteId) {
+    try {
+      await api.delete(`/admin/staff/notes/${noteId}`);
+      setNotes(prev => prev.filter(n => n.id !== noteId));
+    } catch {}
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+
+      {/* Dept accent bar */}
+      <div className={`h-1.5 w-full shrink-0 ${color?.bar ?? 'bg-rim/40'}`} />
+
+      {/* Header */}
+      <div className="relative bg-shell/50 border-b border-rim/40 px-8 py-6 shrink-0">
+        <div className="flex items-center gap-5 pr-20">
+          <div className={`w-20 h-20 rounded-full border-2 ${DEPT_AVATAR[emp.department] ?? 'border-rim/50 text-fog-hi'} flex items-center justify-center overflow-hidden font-heading font-black text-2xl bg-deep shrink-0`}>
+            {emp.photoUrl
+              ? <img src={emp.photoUrl} className="w-full h-full object-cover" alt={emp.name} />
+              : <span>{emp.avatar}</span>
+            }
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="font-heading font-black text-ink text-2xl leading-none">{emp.name}</h2>
+              {emp.department && (
+                <span className={`text-10 font-bold tracking-widests uppercase px-2.5 py-1 rounded-full border ${pillStyle}`}>
+                  {emp.department}
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-fog mt-1.5">{emp.position ?? 'No position set'}</p>
+            <span className={`inline-flex items-center gap-1.5 text-10 font-semibold mt-2
+              ${emp.isLocked ? 'text-amber-400' : emp.isActive ? 'text-green-400' : 'text-red-400'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${emp.isLocked ? 'bg-amber-400' : emp.isActive ? 'bg-green-400' : 'bg-red-400'}`} />
+              {emp.isLocked ? 'Account Locked' : emp.isActive ? 'Active' : 'Inactive'}
+            </span>
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div className="absolute top-5 right-6 flex items-center gap-2">
+          {popoutHref && (
+            <a
+              href={popoutHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open in new tab"
+              className="w-8 h-8 rounded-full bg-shell hover:bg-rim/60 border border-rim/60 flex items-center justify-center text-fog hover:text-cyan transition-colors"
+            >
+              <PopoutIcon />
+            </a>
+          )}
+          {onClose && (
+            <button
+              onClick={onClose}
+              title="Close"
+              className="w-8 h-8 rounded-full bg-shell hover:bg-rim/60 border border-rim/60 flex items-center justify-center text-fog hover:text-ink transition-colors"
+            >
+              <CloseIcon />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex shrink-0 border-b border-rim/40 bg-shell/30 px-4">
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`px-6 py-3.5 text-xs font-bold tracking-widest uppercase transition-all border-b-2 -mb-px
+              ${tab === t.id
+                ? 'text-cyan border-cyan'
+                : 'text-fog hover:text-fog-hi border-transparent'}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      <div className="flex-1 overflow-y-auto p-6 min-h-0">
+
+        {/* ── INFO ── */}
+        {tab === 'info' && (
+          <div>
+            <div className="flex items-center justify-between mb-5">
+              <p className="label-xs">Staff Information</p>
+              {!editMode && (
+                <button
+                  onClick={() => { setEditMode(true); setEditError(''); }}
+                  className="flex items-center gap-1.5 text-10 font-bold tracking-widests uppercase text-fog hover:text-cyan transition-colors"
+                >
+                  <PencilIcon /> Edit
+                </button>
+              )}
+            </div>
+
+            {editMode ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="label-xs block mb-1.5">Full Name</label>
+                    <input className="field text-sm" value={editForm.name}
+                      onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="label-xs block mb-1.5">Email</label>
+                    <input className="field text-sm" type="email" value={editForm.email}
+                      onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="label-xs block mb-1.5">Phone</label>
+                    <input className="field text-sm" placeholder="(225) 555-0100" value={editForm.phone}
+                      onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="label-xs block mb-1.5">Position</label>
+                    <input className="field text-sm" placeholder="e.g. Lifeguard II" value={editForm.position}
+                      onChange={e => setEditForm(f => ({ ...f, position: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="label-xs block mb-1.5">Department</label>
+                    <select className="field text-sm" value={editForm.department}
+                      onChange={e => setEditForm(f => ({ ...f, department: e.target.value }))}>
+                      <option value="">— Select —</option>
+                      {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label-xs block mb-1.5">Hire Date</label>
+                    <input className="field text-sm" type="date" value={editForm.hireDate}
+                      onChange={e => setEditForm(f => ({ ...f, hireDate: e.target.value }))} />
+                  </div>
+                </div>
+                {editError && <p className="text-10 text-red-400 font-semibold">{editError}</p>}
+                <div className="flex gap-2">
+                  <button onClick={handleSave} disabled={editSaving} className="btn-primary flex-1 text-xs py-2">
+                    {editSaving ? 'Saving…' : 'Save Changes'}
+                  </button>
+                  <button onClick={cancelEdit} className="btn-ghost border border-rim/60 rounded-md flex-1 text-xs">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-x-8 gap-y-6">
+                <InfoField label="Full Name"  value={emp.name} />
+                <InfoField label="Email"      value={emp.email} />
+                <InfoField label="Phone"      value={emp.phone ?? '—'} />
+                <InfoField label="Position"   value={emp.position ?? '—'} />
+                <InfoField label="Department" value={emp.department ?? '—'} />
+                <InfoField label="Hire Date"  value={emp.hireDate ? format(parseISO(emp.hireDate), 'MMMM d, yyyy') : '—'} />
+                {emp.departments?.length > 1 && (
+                  <div className="col-span-3">
+                    <InfoField label="Cross-trained"
+                      value={emp.departments.filter(d => d !== emp.department).join(', ')} />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── SCHEDULE ── */}
+        {tab === 'schedule' && (
+          <div>
+            <p className="label-xs mb-5">Shifts — Recent &amp; Upcoming</p>
+            {shiftsLoading ? (
+              <p className="text-fog text-sm text-center py-16">Loading…</p>
+            ) : shifts.length === 0 ? (
+              <p className="text-fog text-sm text-center py-16">No shifts on record for this staff member.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {shifts.map(s => <ShiftRow key={s.id} shift={s} />)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── TIME OFF ── */}
+        {tab === 'timeoff' && (
+          <div>
+            <p className="label-xs mb-5">Time Off Requests</p>
+            {timeoffLoading ? (
+              <p className="text-fog text-sm text-center py-16">Loading…</p>
+            ) : timeoff.length === 0 ? (
+              <p className="text-fog text-sm text-center py-16">No time off requests on record.</p>
+            ) : (
+              <div className="space-y-2">
+                {timeoff.map(r => <TimeOffRow key={r.id} request={r} />)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── NOTES ── */}
+        {tab === 'notes' && (
+          <div className="space-y-5">
+            <div>
+              <p className="label-xs mb-3">Add Note</p>
+              <textarea
+                value={noteText}
+                onChange={e => setNoteText(e.target.value)}
+                placeholder="Write a note about this staff member…"
+                rows={4}
+                className="field text-sm w-full resize-none"
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleAddNote();
+                }}
+              />
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-10 text-fog">Cmd/Ctrl+Enter to submit</p>
+                <button
+                  onClick={handleAddNote}
+                  disabled={notesSaving || !noteText.trim()}
+                  className="btn-primary text-xs px-4 py-2 disabled:opacity-40"
+                >
+                  {notesSaving ? 'Saving…' : 'Add Note'}
+                </button>
+              </div>
+            </div>
+            <div className="border-t border-rim/30 pt-5">
+              <p className="label-xs mb-4">Notes History</p>
+              {notesLoading ? (
+                <p className="text-fog text-sm text-center py-8">Loading…</p>
+              ) : notes.length === 0 ? (
+                <p className="text-fog text-sm text-center py-8">No notes yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {notes.map(n => (
+                    <NoteItem
+                      key={n.id}
+                      note={n}
+                      canDelete={n.authorId === currentUser?.id || currentUser?.role === 'sysadmin'}
+                      onDelete={() => handleDeleteNote(n.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── ACCOUNT ── */}
+        {tab === 'account' && (
+          <div className="space-y-7">
+
+            {/* Overview */}
+            <div>
+              <p className="label-xs mb-4">Account Overview</p>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="panel p-4">
+                  <p className="label-xs mb-1">Role</p>
+                  <p className="text-sm font-semibold text-ink capitalize">{emp.role?.replace('_', ' ') ?? '—'}</p>
+                </div>
+                <div className="panel p-4">
+                  <p className="label-xs mb-1">Member Since</p>
+                  <p className="text-sm font-semibold text-ink">
+                    {emp.createdAt ? format(parseISO(emp.createdAt), 'MMM d, yyyy') : '—'}
+                  </p>
+                </div>
+                <div className="panel p-4">
+                  <p className="label-xs mb-1">Status</p>
+                  <span className={`inline-flex items-center gap-1.5 text-xs font-semibold
+                    ${emp.isLocked ? 'text-amber-400' : emp.isActive ? 'text-green-400' : 'text-red-400'}`}>
+                    <span className={`w-2 h-2 rounded-full ${emp.isLocked ? 'bg-amber-400' : emp.isActive ? 'bg-green-400' : 'bg-red-400'}`} />
+                    {emp.isLocked ? 'Locked' : emp.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Security actions */}
+            <div>
+              <p className="label-xs mb-4">Security</p>
+              <div className="grid grid-cols-2 gap-4">
+
+                {/* Reset password */}
+                <div className="panel p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-ink">Reset Password</p>
+                      <p className="text-10 text-fog mt-0.5">Set a temporary password — staff must change on next login</p>
+                    </div>
+                    {!resetPwOpen && (
+                      <button onClick={() => { setResetPwOpen(true); setResetPwError(''); setResetPw(''); }}
+                        className="btn-ghost border border-rim/60 rounded-md px-3 py-1.5 text-xs shrink-0 ml-3">
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                  {resetPwOpen && (
+                    <div className="space-y-2 pt-1 border-t border-rim/30">
+                      <input
+                        type="password"
+                        className="field text-sm w-full"
+                        placeholder="New temporary password"
+                        value={resetPw}
+                        onChange={e => setResetPw(e.target.value)}
+                        autoFocus
+                      />
+                      {resetPwError && <p className="text-10 text-red-400 font-semibold">{resetPwError}</p>}
+                      <div className="flex gap-2">
+                        <button onClick={handleResetPassword} disabled={resetPwSaving}
+                          className="btn-primary flex-1 text-xs py-1.5">
+                          {resetPwSaving ? 'Saving…' : 'Save'}
+                        </button>
+                        <button onClick={() => { setResetPwOpen(false); setResetPwError(''); setResetPw(''); }}
+                          className="btn-ghost border border-rim/60 rounded-md flex-1 text-xs py-1.5">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Force password reset */}
+                <div className="panel p-4 flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-ink">Require Password Change</p>
+                    <p className="text-10 text-fog mt-0.5">Prompt staff to change their password on next login</p>
+                    {forceSuccess && <p className="text-10 text-green-400 font-semibold mt-1.5">Done — will prompt on next login</p>}
+                  </div>
+                  <button onClick={handleForceReset} disabled={forceSaving}
+                    className="btn-ghost border border-rim/60 rounded-md px-3 py-1.5 text-xs shrink-0 ml-3">
+                    {forceSaving ? 'Saving…' : 'Require'}
+                  </button>
+                </div>
+
+                {/* Lock / Unlock */}
+                <div className={`panel p-4 flex items-start justify-between ${emp.isLocked ? 'border-amber-500/30 bg-amber-950/10' : ''}`}>
+                  <div>
+                    <p className="text-sm font-semibold text-ink">{emp.isLocked ? 'Unlock Account' : 'Lock Account'}</p>
+                    <p className="text-10 text-fog mt-0.5">
+                      {emp.isLocked ? 'Restore login access for this staff member' : 'Immediately prevent this staff member from logging in'}
+                    </p>
+                  </div>
+                  <button onClick={handleLockToggle} disabled={lockSaving}
+                    className={`rounded-md px-3 py-1.5 text-xs shrink-0 ml-3 border font-semibold transition-colors
+                      ${emp.isLocked
+                        ? 'bg-green-950/30 border-green-500/40 text-green-400 hover:bg-green-950/50'
+                        : 'bg-amber-950/20 border-amber-500/30 text-amber-400 hover:bg-amber-950/40'}`}>
+                    {lockSaving ? 'Saving…' : emp.isLocked ? 'Unlock' : 'Lock'}
+                  </button>
+                </div>
+
+                {/* Deactivate / Reactivate */}
+                <div className={`panel p-4 ${!emp.isActive ? 'border-green-500/20' : 'border-red-500/20'}`}>
+                  {deactivateConfirm ? (
+                    <div className="space-y-3">
+                      <p className="text-sm font-semibold text-red-400">Confirm Deactivation</p>
+                      <p className="text-10 text-fog">This will remove all login access. You can reactivate the account at any time.</p>
+                      <div className="flex gap-2">
+                        <button onClick={handleStatusToggle} disabled={statusSaving}
+                          className="flex-1 text-xs py-1.5 rounded-md bg-red-950/30 border border-red-500/40 text-red-400 hover:bg-red-950/50 font-semibold transition-colors">
+                          {statusSaving ? 'Saving…' : 'Confirm Deactivate'}
+                        </button>
+                        <button onClick={() => setDeactivateConfirm(false)}
+                          className="btn-ghost border border-rim/60 rounded-md flex-1 text-xs py-1.5">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-ink">{emp.isActive ? 'Deactivate Account' : 'Reactivate Account'}</p>
+                        <p className="text-10 text-fog mt-0.5">
+                          {emp.isActive ? 'Permanently remove login access (reversible)' : 'Restore this staff member\'s access'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => emp.isActive ? setDeactivateConfirm(true) : handleStatusToggle()}
+                        disabled={statusSaving}
+                        className={`rounded-md px-3 py-1.5 text-xs shrink-0 ml-3 border font-semibold transition-colors
+                          ${emp.isActive
+                            ? 'bg-red-950/20 border-red-500/30 text-red-400 hover:bg-red-950/40'
+                            : 'bg-green-950/20 border-green-500/30 text-green-400 hover:bg-green-950/40'}`}>
+                        {statusSaving ? 'Saving…' : emp.isActive ? 'Deactivate' : 'Reactivate'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            </div>
+
+            {/* Activity log */}
+            <div>
+              <p className="label-xs mb-4">Activity Log</p>
+              {logsLoading ? (
+                <p className="text-fog text-sm text-center py-8">Loading…</p>
+              ) : logs.length === 0 ? (
+                <p className="text-fog text-sm text-center py-8">No activity recorded yet.</p>
+              ) : (
+                <div className="border border-rim/30 rounded-xl overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-rim/30 bg-shell/40">
+                        <th className="text-left px-4 py-2.5 label-xs">Event</th>
+                        <th className="text-left px-4 py-2.5 label-xs">By</th>
+                        <th className="text-left px-4 py-2.5 label-xs">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {logs.map((l, i) => (
+                        <tr key={l.id} className={`border-b border-rim/20 last:border-0 ${i % 2 === 0 ? '' : 'bg-shell/20'}`}>
+                          <td className="px-4 py-2.5 font-semibold text-ink">{l.event}</td>
+                          <td className="px-4 py-2.5 text-fog">{l.actorName ?? '—'}</td>
+                          <td className="px-4 py-2.5 text-fog whitespace-nowrap">
+                            {format(parseISO(l.createdAt), 'MMM d, yyyy h:mm a')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
+function ShiftRow({ shift }) {
+  const today    = new Date().toISOString().slice(0, 10);
+  const isToday  = shift.date === today;
+  const isUpcoming = shift.date > today;
+  return (
+    <div className={`flex items-center gap-4 px-4 py-3 rounded-lg border transition-colors
+      ${isToday || isUpcoming ? 'border-rim/50 bg-shell/40' : 'border-rim/20 bg-shell/10 opacity-55'}`}>
+      <div className="shrink-0 text-center w-14">
+        <p className="text-10 text-fog leading-none mb-0.5">{format(parseISO(shift.date), 'EEE')}</p>
+        <p className="text-sm font-bold text-ink leading-none">{format(parseISO(shift.date), 'MMM d')}</p>
+      </div>
+      <div className="w-px h-8 bg-rim/40 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-ink">{fmtTime(shift.start)} – {fmtTime(shift.end)}</p>
+        <p className="text-10 text-fog mt-0.5">
+          {shift.position || shift.department || '—'}
+          {shift.location ? ` · ${shift.location}` : ''}
+        </p>
+      </div>
+      {isToday && (
+        <span className="text-10 font-bold text-green-400 px-2 py-0.5 rounded-full bg-green-950/30 border border-green-500/25 shrink-0">
+          Today
+        </span>
+      )}
+      {isUpcoming && (
+        <span className="text-10 font-bold text-cyan px-2 py-0.5 rounded-full bg-cyan/10 border border-cyan/25 shrink-0">
+          Upcoming
+        </span>
+      )}
+    </div>
+  );
+}
+
+function TimeOffRow({ request }) {
+  const STATUS = {
+    pending:  { style: 'bg-amber-950/30 border-amber-500/25 text-amber-300', label: 'Pending' },
+    approved: { style: 'bg-green-950/30 border-green-500/25 text-green-300', label: 'Approved' },
+    denied:   { style: 'bg-red-950/30 border-red-500/25 text-red-400',       label: 'Denied' },
+  };
+  const s = STATUS[request.status] ?? STATUS.pending;
+  return (
+    <div className="flex items-start gap-4 px-4 py-3 rounded-lg border border-rim/30 bg-shell/20">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-ink">
+          {format(parseISO(request.startDate), 'MMM d, yyyy')}
+          {request.endDate !== request.startDate && (
+            <> – {format(parseISO(request.endDate), 'MMM d, yyyy')}</>
+          )}
+        </p>
+        {request.reason && <p className="text-10 text-fog mt-0.5 line-clamp-2">{request.reason}</p>}
+        {request.reviewNotes && <p className="text-10 text-fog-hi mt-1 italic">"{request.reviewNotes}"</p>}
+      </div>
+      <span className={`text-10 font-bold px-2.5 py-1 rounded-full border shrink-0 ${s.style}`}>{s.label}</span>
+    </div>
+  );
+}
+
+function NoteItem({ note, canDelete, onDelete }) {
+  return (
+    <div className="px-4 py-3 rounded-lg border border-rim/30 bg-shell/20 space-y-2">
+      <p className="text-sm text-ink leading-relaxed whitespace-pre-wrap">{note.body}</p>
+      <div className="flex items-center justify-between">
+        <p className="text-10 text-fog">
+          {note.authorName} &middot; {format(parseISO(note.createdAt), 'MMM d, yyyy h:mm a')}
+        </p>
+        {canDelete && (
+          <button
+            onClick={onDelete}
+            className="text-fog hover:text-red-400 transition-colors p-1 -m-1 rounded hover:bg-red-950/20"
+          >
+            <TrashIcon />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InfoField({ label, value }) {
+  return (
+    <div>
+      <p className="label-xs mb-1">{label}</p>
+      <p className="text-sm text-ink font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function fmtTime(t) {
+  if (!t) return '';
+  const [h, m] = t.split(':').map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+}
+
+// ── Icons ──────────────────────────────────────────────────────────────────────
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+function PencilIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  );
+}
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+    </svg>
+  );
+}
+function PopoutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+      <polyline points="15 3 21 3 21 9" />
+      <line x1="10" y1="14" x2="21" y2="3" />
+    </svg>
+  );
+}

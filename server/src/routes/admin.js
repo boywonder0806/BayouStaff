@@ -5,6 +5,42 @@ import { requireAdmin, requireSysAdmin } from '../middleware/auth.js';
 
 const router = Router();
 
+// Idempotent column migrations
+pool.query('ALTER TABLE employees ADD COLUMN IF NOT EXISTS photo_url TEXT').catch(() => {});
+pool.query('ALTER TABLE employees ADD COLUMN IF NOT EXISTS force_password_reset BOOLEAN NOT NULL DEFAULT FALSE').catch(() => {});
+pool.query('ALTER TABLE employees ADD COLUMN IF NOT EXISTS is_locked BOOLEAN NOT NULL DEFAULT FALSE').catch(() => {});
+pool.query(`CREATE TABLE IF NOT EXISTS employee_notes (
+  id         SERIAL PRIMARY KEY,
+  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  author_id  INT NOT NULL REFERENCES employees(id),
+  body       TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+)`).catch(e => console.error('employee_notes migration:', e.message));
+
+pool.query(`CREATE TABLE IF NOT EXISTS activity_logs (
+  id          SERIAL PRIMARY KEY,
+  employee_id INT REFERENCES employees(id) ON DELETE SET NULL,
+  event       TEXT NOT NULL,
+  details     JSONB DEFAULT '{}',
+  actor_id    INT REFERENCES employees(id) ON DELETE SET NULL,
+  ip_address  TEXT,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+)`).catch(e => console.error('activity_logs migration:', e.message));
+
+pool.query(`CREATE INDEX IF NOT EXISTS idx_activity_logs_emp
+  ON activity_logs(employee_id)`).catch(() => {});
+
+// ── Activity log helper ───────────────────────────────────────────────────────
+async function logEvent(employeeId, event, details = {}, actorId = null, ip = null) {
+  try {
+    await pool.query(
+      `INSERT INTO activity_logs (employee_id, event, details, actor_id, ip_address)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [employeeId || null, event, JSON.stringify(details), actorId || null, ip || null]
+    );
+  } catch {}
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function getMondayOfWeek(dateStr) {
   const d = new Date(dateStr);
@@ -74,7 +110,9 @@ router.get('/employees', requireAdmin, async (_req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT id, email, name, role, department, departments, position,
-              avatar, phone, hire_date AS "hireDate", is_active AS "isActive"
+              avatar, phone, hire_date AS "hireDate", is_active AS "isActive",
+              photo_url AS "photoUrl", is_locked AS "isLocked",
+              created_at AS "createdAt"
        FROM employees ORDER BY name`
     );
     res.json({ employees: rows });
@@ -84,17 +122,19 @@ router.get('/employees', requireAdmin, async (_req, res) => {
 });
 
 router.patch('/employees/:id/password', requireAdmin, async (req, res) => {
-  const { password } = req.body;
+  const { password, forceReset = false } = req.body;
   if (!password || password.length < 6) {
     return res.status(400).json({ error: 'Password must be at least 6 characters.' });
   }
   try {
     const hash = await bcrypt.hash(password, 10);
+    const empId = parseInt(req.params.id);
     const { rowCount } = await pool.query(
-      `UPDATE employees SET password_hash = $1 WHERE id = $2`,
-      [hash, parseInt(req.params.id)]
+      `UPDATE employees SET password_hash = $1, force_password_reset = $2 WHERE id = $3`,
+      [hash, forceReset === true, empId]
     );
     if (!rowCount) return res.status(404).json({ error: 'User not found' });
+    logEvent(empId, 'Password reset', { forceReset }, req.user.id, req.ip);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update password' });
@@ -139,6 +179,282 @@ router.patch('/employees/:id/departments', requireAdmin, async (req, res) => {
     res.json({ user: rows[0] });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update departments' });
+  }
+});
+
+router.patch('/employees/:id/lock', requireAdmin, async (req, res) => {
+  const { locked } = req.body;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE employees SET is_locked = $1 WHERE id = $2
+       RETURNING id, is_locked AS "isLocked"`,
+      [locked === true, parseInt(req.params.id)]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'User not found' });
+    logEvent(parseInt(req.params.id), locked ? 'Account locked' : 'Account unlocked', {}, req.user.id, req.ip);
+    res.json({ user: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update lock status' });
+  }
+});
+
+// ── Staff management (crew members) ──────────────────────────────────────────
+router.get('/staff/check', requireAdmin, async (req, res) => {
+  const { name, email } = req.query;
+  const result = { emailMatch: null, nameMatches: [], netchexMatches: [] };
+  try {
+    if (email?.trim()) {
+      const { rows } = await pool.query(
+        `SELECT id, name, email, department, position FROM employees WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+        [email.trim()]
+      );
+      result.emailMatch = rows[0] ?? null;
+    }
+    if (name?.trim()) {
+      const words = name.trim().split(/\s+/).filter(w => w.length > 1);
+      if (words.length) {
+        const { rows } = await pool.query(
+          `SELECT id, name, email, department FROM employees WHERE name ILIKE $1 LIMIT 5`,
+          [`%${words.join('%')}%`]
+        );
+        result.nameMatches = rows;
+      }
+      const firstName = name.trim().split(/\s+/)[0];
+      if (firstName.length > 1) {
+        const { rows: nx } = await pool.query(
+          `SELECT employee_name AS "employeeName", COUNT(*)::int AS "shiftCount"
+           FROM netchex_shifts
+           WHERE employee_name ILIKE $1 AND employee_id IS NULL
+           GROUP BY employee_name ORDER BY "shiftCount" DESC LIMIT 5`,
+          [`%${firstName}%`]
+        );
+        result.netchexMatches = nx;
+      }
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('Staff check error:', err.message);
+    res.status(500).json({ error: 'Check failed.' });
+  }
+});
+
+router.post('/staff', requireAdmin, async (req, res) => {
+  const { name, email, phone, department, position, hireDate, password, linkNetchexName } = req.body;
+  if (!name?.trim() || !email?.trim() || !department || !password) {
+    return res.status(400).json({ error: 'Name, email, department, and password are required.' });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: dup } = await client.query(
+      `SELECT id FROM employees WHERE LOWER(email) = LOWER($1)`, [email.trim()]
+    );
+    if (dup.length) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'An account with this email already exists.' });
+    }
+    const hash = await bcrypt.hash(password, 10);
+    const parts = name.trim().split(/\s+/);
+    const avatar = parts.length >= 2
+      ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+      : name.trim().slice(0, 2).toUpperCase();
+    const { rows: [emp] } = await client.query(
+      `INSERT INTO employees
+         (name, email, password_hash, role, department, departments, position, phone, hire_date, avatar, force_password_reset)
+       VALUES ($1,$2,$3,'crew_member',$4,$5,$6,$7,$8,$9,TRUE)
+       RETURNING id, name, email, role, department, departments, position, phone,
+                 hire_date AS "hireDate", avatar, is_active AS "isActive",
+                 is_locked AS "isLocked", photo_url AS "photoUrl"`,
+      [name.trim(), email.trim().toLowerCase(), hash, department, [department],
+       position?.trim() || null, phone?.trim() || null, hireDate || null, avatar]
+    );
+    if (linkNetchexName) {
+      await client.query(
+        `UPDATE netchex_shifts SET employee_id = $1
+         WHERE LOWER(employee_name) = LOWER($2) AND employee_id IS NULL`,
+        [emp.id, linkNetchexName]
+      );
+    }
+    await client.query('COMMIT');
+    res.status(201).json({ employee: emp });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Create staff error:', err.message);
+    res.status(500).json({ error: 'Failed to create staff member.' });
+  } finally {
+    client.release();
+  }
+});
+
+router.patch('/staff/:id', requireAdmin, async (req, res) => {
+  const { name, email, phone, position, department, hireDate } = req.body;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE employees SET
+         name       = COALESCE($1, name),
+         email      = COALESCE($2, email),
+         phone      = COALESCE($3, phone),
+         position   = COALESCE($4, position),
+         department = COALESCE($5, department),
+         hire_date  = COALESCE($6::date, hire_date)
+       WHERE id = $7 AND role = 'crew_member'
+       RETURNING id, name, email, role, department, departments, position, phone,
+                 hire_date AS "hireDate", avatar, is_active AS "isActive",
+                 is_locked AS "isLocked", photo_url AS "photoUrl"`,
+      [name||null, email||null, phone||null, position||null, department||null,
+       hireDate||null, parseInt(req.params.id)]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Staff member not found.' });
+    logEvent(parseInt(req.params.id), 'Profile updated', {}, req.user.id, req.ip);
+    res.json({ employee: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update staff member.' });
+  }
+});
+
+// ── Staff detail tabs ─────────────────────────────────────────────────────────
+router.get('/staff/:id', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name, email, role, department, departments, position, phone,
+              hire_date AS "hireDate", avatar, is_active AS "isActive",
+              is_locked AS "isLocked", photo_url AS "photoUrl",
+              created_at AS "createdAt"
+       FROM employees WHERE id = $1 AND role = 'crew_member'`,
+      [parseInt(req.params.id)]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Staff member not found' });
+    res.json({ employee: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch staff member' });
+  }
+});
+
+router.get('/staff/:id/schedule', requireAdmin, async (req, res) => {
+  const empId = parseInt(req.params.id);
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, date::text, start_time AS start, end_time AS end,
+              department, position, location, COALESCE(notes,'') AS notes
+       FROM shifts WHERE employee_id = $1
+       ORDER BY date DESC, start_time DESC LIMIT 60`,
+      [empId]
+    );
+    res.json({ shifts: rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch schedule' });
+  }
+});
+
+router.get('/staff/:id/timeoff', requireAdmin, async (req, res) => {
+  const empId = parseInt(req.params.id);
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, start_date::text AS "startDate", end_date::text AS "endDate",
+              reason, status, review_notes AS "reviewNotes", created_at AS "createdAt"
+       FROM time_off_requests WHERE employee_id = $1
+       ORDER BY created_at DESC`,
+      [empId]
+    );
+    res.json({ requests: rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch time off' });
+  }
+});
+
+router.get('/staff/:id/notes', requireAdmin, async (req, res) => {
+  const empId = parseInt(req.params.id);
+  try {
+    const { rows } = await pool.query(
+      `SELECT n.id, n.body, n.created_at AS "createdAt",
+              n.author_id AS "authorId", e.name AS "authorName"
+       FROM employee_notes n JOIN employees e ON e.id = n.author_id
+       WHERE n.employee_id = $1
+       ORDER BY n.created_at DESC`,
+      [empId]
+    );
+    res.json({ notes: rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch notes' });
+  }
+});
+
+router.post('/staff/:id/notes', requireAdmin, async (req, res) => {
+  const empId = parseInt(req.params.id);
+  const { body } = req.body;
+  if (!body?.trim()) return res.status(400).json({ error: 'Note body is required' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO employee_notes (employee_id, author_id, body)
+       VALUES ($1, $2, $3)
+       RETURNING id, body, created_at AS "createdAt", author_id AS "authorId"`,
+      [empId, req.user.id, body.trim()]
+    );
+    res.status(201).json({ note: { ...rows[0], authorName: req.user.name } });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save note' });
+  }
+});
+
+router.get('/staff/:id/logs', requireAdmin, async (req, res) => {
+  const empId = parseInt(req.params.id);
+  try {
+    const { rows } = await pool.query(
+      `SELECT l.id, l.event, l.details, l.ip_address AS "ipAddress",
+              l.created_at AS "createdAt",
+              a.name AS "actorName"
+       FROM activity_logs l
+       LEFT JOIN employees a ON a.id = l.actor_id
+       WHERE l.employee_id = $1
+       ORDER BY l.created_at DESC LIMIT 50`,
+      [empId]
+    );
+    res.json({ logs: rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch logs' });
+  }
+});
+
+router.patch('/staff/:id/force-reset', requireAdmin, async (req, res) => {
+  const empId = parseInt(req.params.id);
+  try {
+    await pool.query(
+      `UPDATE employees SET force_password_reset = TRUE WHERE id = $1`, [empId]
+    );
+    logEvent(empId, 'Password reset required', {}, req.user.id, req.ip);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to set force reset' });
+  }
+});
+
+router.patch('/staff/:id/status', requireAdmin, async (req, res) => {
+  const { isActive } = req.body;
+  const empId = parseInt(req.params.id);
+  try {
+    const { rows } = await pool.query(
+      `UPDATE employees SET is_active = $1 WHERE id = $2
+       RETURNING id, is_active AS "isActive"`,
+      [isActive === true, empId]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Staff member not found' });
+    logEvent(empId, isActive ? 'Account reactivated' : 'Account deactivated', {}, req.user.id, req.ip);
+    res.json({ employee: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update account status' });
+  }
+});
+
+router.delete('/staff/notes/:noteId', requireAdmin, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query(
+      `DELETE FROM employee_notes WHERE id = $1 AND (author_id = $2 OR $3 = 'sysadmin')`,
+      [parseInt(req.params.noteId), req.user.id, req.user.role]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'Note not found or not authorized' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete note' });
   }
 });
 
@@ -400,8 +716,9 @@ router.get('/sysadmin/users', requireSysAdmin, async (_req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT id, email, name, role, department, departments, position,
-              avatar, phone, hire_date AS "hireDate", is_active AS "isActive", created_at AS "createdAt"
-       FROM employees ORDER BY name`
+              avatar, phone, hire_date AS "hireDate", is_active AS "isActive", created_at AS "createdAt",
+              photo_url AS "photoUrl", is_locked AS "isLocked"
+       FROM employees WHERE role != 'crew_member' ORDER BY name`
     );
     res.json({ users: rows });
   } catch (err) {
@@ -717,6 +1034,21 @@ router.delete('/employees/:id/certifications/:certId', requireSysAdmin, async (r
 });
 
 // ── SysAdmin ──────────────────────────────────────────────────────────────────
+router.patch('/sysadmin/users/:id/photo', requireSysAdmin, async (req, res) => {
+  const { photoUrl } = req.body;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE employees SET photo_url = $1 WHERE id = $2
+       RETURNING id, photo_url AS "photoUrl"`,
+      [photoUrl || null, parseInt(req.params.id)]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'User not found' });
+    res.json({ user: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update photo' });
+  }
+});
+
 router.patch('/sysadmin/users/:id', requireSysAdmin, async (req, res) => {
   const { name, email, role, department, departments, position, phone, isActive } = req.body;
   try {

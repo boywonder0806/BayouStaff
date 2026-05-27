@@ -6,11 +6,11 @@ const NAV = [
   { to: '/schedule',      label: 'Schedule', icon: CalIcon       },
   { to: '/messages',      label: 'Messages', icon: MsgIcon       },
   { to: '/announcements', label: 'Board',    icon: BroadcastIcon },
+  { to: '/weather',       label: 'Weather',  icon: LightningIcon },
 ];
 const ADMIN_NAV = [
-  { to: '/scheduler',    label: 'T&A',   icon: ClockIcon  },
-  { to: '/staff/manage', label: 'Staff', icon: StaffIcon  },
-  { to: '/admin',        label: 'Admin', icon: GridIcon   },
+  { to: '/scheduler',   label: 'T&A',  icon: ClockIcon },
+  { to: '/staff/manage', label: 'Staff', icon: StaffIcon },
 ];
 const SYSADMIN_NAV = [
   { to: '/sysadmin/users', label: 'System', icon: ShieldIcon },
@@ -167,9 +167,16 @@ function GridIcon() {
 function BroadcastIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-full h-full">
-      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+      {/* board frame */}
+      <rect x="2" y="2" width="20" height="16" rx="1.5" />
+      {/* stand */}
+      <line x1="12" y1="18" x2="12" y2="22" />
+      <line x1="8" y1="22" x2="16" y2="22" />
+      {/* pinned note lines */}
+      <line x1="6" y1="7" x2="14" y2="7" />
+      <line x1="6" y1="11" x2="11" y2="11" />
+      {/* pushpin */}
+      <circle cx="17.5" cy="6.5" r="1.25" fill="currentColor" stroke="none" />
     </svg>
   );
 }
@@ -207,6 +214,13 @@ function StaffIcon() {
       <circle cx="9" cy="7" r="4" />
       <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+function LightningIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-full h-full">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
     </svg>
   );
 }

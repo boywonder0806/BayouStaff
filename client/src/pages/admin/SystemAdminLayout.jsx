@@ -1,11 +1,10 @@
 import { NavLink, Outlet } from 'react-router-dom';
 
 const SUB_NAV = [
-  { to: '/sysadmin/users',          label: 'Users',  icon: UsersIcon },
-  { to: '/sysadmin/departments',    label: 'Depts',  icon: DeptIcon  },
-  { to: '/sysadmin/certifications', label: 'Certs',  icon: CertIcon  },
-  { to: '/sysadmin/logs',           label: 'Logs',   icon: LogsIcon  },
-  { to: '/sysadmin/api',            label: 'API',    icon: ApiIcon   },
+  { to: '/sysadmin/users',       label: 'Users', icon: UsersIcon },
+  { to: '/sysadmin/departments', label: 'Depts', icon: DeptIcon  },
+  { to: '/sysadmin/logs',        label: 'Logs',  icon: LogsIcon  },
+  { to: '/sysadmin/api',         label: 'API',   icon: ApiIcon   },
 ];
 
 export default function SystemAdminLayout() {
@@ -85,15 +84,6 @@ function UsersIcon() {
   );
 }
 
-function CertIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-full h-full">
-      <circle cx="12" cy="8" r="6" />
-      <path d="M9 12l2 2 4-4" />
-      <path d="M8.21 13.89L7 23l5-3 5 3-1.21-9.12" />
-    </svg>
-  );
-}
 function LogsIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-full h-full">

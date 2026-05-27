@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { format, parseISO } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import api from '../../../lib/api.js';
 import { useAuth } from '../../../context/AuthContext.jsx';
@@ -10,32 +9,32 @@ export const ROLES = [
   { value: 'sysadmin',    label: 'System Administrator', style: 'bg-gold/10 border-gold/25 text-gold',     active: 'bg-gold/15 border-gold/40 text-gold'  },
 ];
 
-const DEPT_FILTERS = ['Aquatics', 'Guest Services', 'Food & Beverage', 'Cleaning Crew'];
-
-const DEPT_PILL = {
-  'Aquatics':        'bg-aq/10 border-aq/30 text-aq',
-  'Guest Services':  'bg-gs/10 border-gs/30 text-gs',
-  'Food & Beverage': 'bg-fb/10 border-fb/30 text-fb',
-  'Cleaning Crew':   'bg-cc/10 border-cc/30 text-cc',
-  'Management':      'bg-mgmt/10 border-mgmt/30 text-mgmt',
-};
-
 export default function SysAdminUsers() {
   const { user: me } = useAuth();
-  const [staff, setStaff]           = useState([]);
-  const [selected, setSelected]     = useState(null);
+  const [staff, setStaff]       = useState([]);
+  const [selected, setSelected] = useState(null);
   const [creating, setCreating] = useState(false);
   const [search, setSearch]     = useState('');
 
   useEffect(() => {
-    api.get('/admin/employees')
-      .then(r => setStaff(r.data.employees))
+    api.get('/admin/sysadmin/users')
+      .then(r => setStaff(r.data.users))
       .catch(console.error);
   }, []);
 
   function handleRoleUpdate(userId, newRole) {
     setStaff(prev => prev.map(s => s.id === userId ? { ...s, role: newRole } : s));
     if (selected?.id === userId) setSelected(s => ({ ...s, role: newRole }));
+  }
+
+  function handleUserUpdate(userId, updates) {
+    setStaff(prev => prev.map(s => s.id === userId ? { ...s, ...updates } : s));
+    setSelected(s => s?.id === userId ? { ...s, ...updates } : s);
+  }
+
+  function handleLockUpdate(userId, isLocked) {
+    setStaff(prev => prev.map(s => s.id === userId ? { ...s, isLocked } : s));
+    setSelected(s => s?.id === userId ? { ...s, isLocked } : s);
   }
 
   const visible = search
@@ -118,8 +117,11 @@ export default function SysAdminUsers() {
                     onClick={() => setSelected(s)}
                     className="w-full flex items-center gap-4 bg-shell/40 hover:bg-shell border border-rim/40 hover:border-rim/80 rounded-xl px-4 py-3 text-left transition-all group"
                   >
-                    <div className="w-10 h-10 rounded-full bg-shell border border-rim flex items-center justify-center text-sm font-heading font-bold text-fog-hi shrink-0">
-                      {s.avatar}
+                    <div className="w-10 h-10 rounded-full bg-shell border border-rim flex items-center justify-center text-sm font-heading font-bold text-fog-hi shrink-0 overflow-hidden">
+                      {s.photoUrl
+                        ? <img src={s.photoUrl} className="w-full h-full object-cover" alt={s.name} />
+                        : s.avatar
+                      }
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
@@ -129,9 +131,16 @@ export default function SysAdminUsers() {
                       <p className="text-10 text-fog mt-0.5">{s.position} · {s.department}</p>
                     </div>
                     <div className="text-right shrink-0">
-                      <span className={`text-10 font-bold tracking-widests uppercase px-2.5 py-1 rounded-full border ${role.style}`}>
-                        {role.label}
-                      </span>
+                      <div className="flex items-center gap-2 justify-end">
+                        <span className={`text-10 font-bold tracking-widests uppercase px-2.5 py-1 rounded-full border ${role.style}`}>
+                          {role.label}
+                        </span>
+                        {s.isLocked && (
+                          <span title="Account locked" className="text-amber-400">
+                            <RowLockIcon />
+                          </span>
+                        )}
+                      </div>
                       <p className="text-10 text-fog mt-1.5">{s.email}</p>
                     </div>
                     <span className="text-fog/30 group-hover:text-fog transition-colors ml-1">
@@ -152,6 +161,8 @@ export default function SysAdminUsers() {
           isSelf={selected.id === me?.id}
           onClose={() => setSelected(null)}
           onRoleUpdate={handleRoleUpdate}
+          onUserUpdate={handleUserUpdate}
+          onLockUpdate={handleLockUpdate}
         />
       )}
 
@@ -175,9 +186,11 @@ const DEPT_STYLE = {
 };
 
 // ── User Modal ────────────────────────────────────────────────────────────────
-function UserModal({ user, isSelf, onClose, onRoleUpdate }) {
-  const navigate    = useNavigate();
-  const backdropRef = useRef(null);
+function UserModal({ user, isSelf, onClose, onRoleUpdate, onUserUpdate, onLockUpdate }) {
+  const navigate       = useNavigate();
+  const backdropRef    = useRef(null);
+  const photoInputRef  = useRef(null);
+
   const [saving, setSaving]                 = useState(false);
   const [deptSaving, setDeptSaving]         = useState(false);
   const [activeDepts, setActiveDepts]       = useState(user.departments ?? [user.department]);
@@ -186,6 +199,14 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate }) {
   const [pwError, setPwError]               = useState('');
   const [pwSuccess, setPwSuccess]           = useState(false);
   const [deactivateStep, setDeactivateStep] = useState(false);
+
+  const [editMode, setEditMode]   = useState(false);
+  const [editForm, setEditForm]   = useState({ name: user.name, email: user.email, phone: user.phone ?? '', position: user.position ?? '' });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError]   = useState('');
+
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [lockSaving, setLockSaving]         = useState(false);
 
   const role = ROLES.find(r => r.value === user.role) ?? ROLES[0];
 
@@ -220,7 +241,7 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate }) {
     try {
       await api.patch(`/admin/employees/${user.id}/departments`, { departments: next });
     } catch (err) {
-      setActiveDepts(activeDepts); // revert on error
+      setActiveDepts(activeDepts);
       console.error(err);
     } finally {
       setDeptSaving(false);
@@ -243,6 +264,68 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate }) {
     }
   }
 
+  async function handleInfoSave() {
+    if (!editForm.name.trim() || !editForm.email.trim()) {
+      setEditError('Name and email are required.'); return;
+    }
+    setEditSaving(true);
+    setEditError('');
+    try {
+      await api.patch(`/admin/sysadmin/users/${user.id}`, {
+        name:     editForm.name.trim(),
+        email:    editForm.email.trim().toLowerCase(),
+        phone:    editForm.phone.trim() || null,
+        position: editForm.position.trim() || null,
+      });
+      onUserUpdate(user.id, {
+        name:     editForm.name.trim(),
+        email:    editForm.email.trim().toLowerCase(),
+        phone:    editForm.phone.trim() || null,
+        position: editForm.position.trim() || null,
+      });
+      setEditMode(false);
+    } catch (err) {
+      setEditError(err.response?.data?.error || 'Failed to save changes.');
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  function cancelEdit() {
+    setEditMode(false);
+    setEditError('');
+    setEditForm({ name: user.name, email: user.email, phone: user.phone ?? '', position: user.position ?? '' });
+  }
+
+  async function handleLockToggle() {
+    setLockSaving(true);
+    try {
+      const next = !user.isLocked;
+      await api.patch(`/admin/employees/${user.id}/lock`, { locked: next });
+      onLockUpdate(user.id, next);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLockSaving(false);
+    }
+  }
+
+  async function handlePhotoChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoUploading(true);
+    try {
+      const dataUrl = await resizeToBase64(file);
+      await api.patch(`/admin/sysadmin/users/${user.id}/photo`, { photoUrl: dataUrl });
+      onUserUpdate(user.id, { photoUrl: dataUrl });
+    } catch (err) {
+      console.error('Photo upload failed:', err);
+    } finally {
+      setPhotoUploading(false);
+      e.target.value = '';
+    }
+  }
+
   return (
     <div
       ref={backdropRef}
@@ -254,9 +337,34 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate }) {
         {/* Header */}
         <div className="relative bg-shell/60 border-b border-rim/40 px-7 py-5">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-deep border-2 border-rim flex items-center justify-center font-heading font-black text-lg text-fog-hi shrink-0">
-              {user.avatar}
+
+            {/* Clickable avatar / photo */}
+            <div
+              className="relative shrink-0 group/photo cursor-pointer"
+              onClick={() => photoInputRef.current?.click()}
+              title="Change photo"
+            >
+              <div className="w-14 h-14 rounded-full bg-deep border-2 border-rim flex items-center justify-center font-heading font-black text-lg text-fog-hi overflow-hidden">
+                {user.photoUrl
+                  ? <img src={user.photoUrl} className="w-full h-full object-cover" alt={user.name} />
+                  : user.avatar
+                }
+              </div>
+              <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover/photo:opacity-100 transition-opacity">
+                {photoUploading
+                  ? <span className="text-white text-10 font-bold">…</span>
+                  : <CameraIcon />
+                }
+              </div>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoChange}
+              />
             </div>
+
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h2 className="font-heading font-black text-ink text-xl leading-none">{user.name}</h2>
@@ -277,19 +385,82 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate }) {
         </div>
 
         {/* Body */}
-        <div className="p-7 space-y-6">
+        <div className="p-7 space-y-6 max-h-[70vh] overflow-y-auto">
 
-          {/* Info grid */}
+          {/* Info section */}
           <div>
-            <p className="label-xs mb-3">Account Information</p>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-3">
-              <Field label="Email"       value={user.email} />
-              <Field label="Phone"       value={user.phone ?? '—'} />
-              <Field label="Department"  value={user.department} />
-              <Field label="Position"    value={user.position} />
-              <Field label="Netchex ID"  value={`#${user.id}`} />
-              <Field label="Hire Date"   value={user.hireDate ? format(parseISO(user.hireDate), 'MMMM d, yyyy') : '—'} />
+            <div className="flex items-center justify-between mb-3">
+              <p className="label-xs">Account Information</p>
+              {!editMode && (
+                <button
+                  onClick={() => { setEditMode(true); setEditError(''); }}
+                  className="flex items-center gap-1.5 text-10 font-bold tracking-widests uppercase text-fog hover:text-cyan transition-colors"
+                >
+                  <PencilIcon /> Edit
+                </button>
+              )}
             </div>
+
+            {editMode ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label-xs block mb-1.5">Full Name</label>
+                    <input
+                      className="field text-sm"
+                      value={editForm.name}
+                      onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="label-xs block mb-1.5">Email</label>
+                    <input
+                      className="field text-sm"
+                      type="email"
+                      value={editForm.email}
+                      onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="label-xs block mb-1.5">Phone</label>
+                    <input
+                      className="field text-sm"
+                      placeholder="(225) 555-0100"
+                      value={editForm.phone}
+                      onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="label-xs block mb-1.5">Position</label>
+                    <input
+                      className="field text-sm"
+                      placeholder="e.g. Shift Manager"
+                      value={editForm.position}
+                      onChange={e => setEditForm(f => ({ ...f, position: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                {editError && <p className="text-10 text-red-400 font-semibold">{editError}</p>}
+                <div className="flex gap-2">
+                  <button onClick={handleInfoSave} disabled={editSaving}
+                    className="btn-primary flex-1 text-xs py-2">
+                    {editSaving ? 'Saving…' : 'Save Changes'}
+                  </button>
+                  <button onClick={cancelEdit}
+                    className="btn-ghost border border-rim/60 rounded-md flex-1 text-xs">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+                <Field label="Full Name"  value={user.name} />
+                <Field label="Email"      value={user.email} />
+                <Field label="Phone"      value={user.phone ?? '—'} />
+                <Field label="Position"   value={user.position ?? '—'} />
+                <Field label="Department" value={user.department} />
+              </div>
+            )}
           </div>
 
           {/* Role assignment */}
@@ -441,6 +612,36 @@ function UserModal({ user, isSelf, onClose, onRoleUpdate }) {
               </div>
             </div>
 
+            {/* Lock account */}
+            {!isSelf && (
+              <div className={`mt-3 rounded-xl p-4 border ${user.isLocked ? 'bg-amber-950/30 border-amber-500/30' : 'bg-shell/40 border-rim/40'}`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className={`text-xs font-semibold ${user.isLocked ? 'text-amber-300' : 'text-ink'}`}>
+                      {user.isLocked ? 'Account Locked' : 'Lock Account'}
+                    </p>
+                    <p className="text-10 text-fog mt-0.5">
+                      {user.isLocked
+                        ? 'This account is locked. The user cannot sign in.'
+                        : 'Prevents sign-in without removing the account.'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleLockToggle}
+                    disabled={lockSaving}
+                    className={`shrink-0 ml-4 px-4 py-2 rounded-md text-xs font-bold border transition-colors
+                      ${user.isLocked
+                        ? 'text-green-400 border-green-500/30 hover:bg-green-500/10'
+                        : 'text-amber-400 border-amber-500/30 hover:bg-amber-500/10'
+                      }
+                      ${lockSaving ? 'opacity-50 cursor-wait' : ''}`}
+                  >
+                    {lockSaving ? '…' : user.isLocked ? 'Unlock' : 'Lock'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {!isSelf && (
               <div className="mt-3 bg-red-950/20 border border-red-500/20 rounded-xl p-4">
                 <div className="flex items-center justify-between">
@@ -481,6 +682,28 @@ function Field({ label, value }) {
       <p className="text-sm text-ink font-semibold">{value}</p>
     </div>
   );
+}
+
+function resizeToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      const size = 200;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const minDim = Math.min(img.width, img.height);
+      const sx = (img.width - minDim) / 2;
+      const sy = (img.height - minDim) / 2;
+      ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
+      URL.revokeObjectURL(objectUrl);
+      resolve(canvas.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Image load failed')); };
+    img.src = objectUrl;
+  });
 }
 
 // ── Permissions Panel ─────────────────────────────────────────────────────────
@@ -531,7 +754,7 @@ function PermissionsPanel({ user, activeDepts, deptSaving, onToggle }) {
                 <p className="text-10 text-fog mt-0.5">{dept.desc}</p>
               </div>
               {/* Badge */}
-              <span className={`shrink-0 text-10 font-bold tracking-widest uppercase px-2.5 py-1 rounded-full border transition-all
+              <span className={`shrink-0 text-10 font-bold tracking-widests uppercase px-2.5 py-1 rounded-full border transition-all
                 ${isActive
                   ? `bg-${dept.color}/10 border-${dept.color}/30 text-${dept.color}`
                   : 'bg-transparent border-rim/40 text-fog'}`}>
@@ -684,10 +907,7 @@ function CreateUserModal({ onClose, onCreated }) {
               </div>
 
             </div>
-            {/* end right column */}
-
           </div>
-          {/* end grid */}
 
           {error && <p className="text-xs text-red-400 font-semibold mt-4">{error}</p>}
 
@@ -707,6 +927,7 @@ function CreateUserModal({ onClose, onCreated }) {
   );
 }
 
+// ── Icons ─────────────────────────────────────────────────────────────────────
 function CloseIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
@@ -747,17 +968,29 @@ function PlusIcon() {
   );
 }
 
-function FilterPill({ label, active, activeClass, onClick }) {
+function PencilIcon() {
   return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1 rounded-full border text-10 font-bold tracking-widests uppercase transition-all
-        ${active
-          ? activeClass ?? 'bg-shell border-fog-hi/40 text-ink'
-          : 'bg-transparent border-rim/50 text-fog hover:border-rim hover:text-fog-hi'
-        }`}
-    >
-      {label}
-    </button>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  );
+}
+
+function RowLockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  );
+}
+
+function CameraIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={1.75} className="w-5 h-5">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+      <circle cx="12" cy="13" r="4" />
+    </svg>
   );
 }

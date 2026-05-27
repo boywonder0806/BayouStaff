@@ -27,11 +27,15 @@ export default function NetchexImport() {
     setParsing(true);
     try {
       const bytes = await file.arrayBuffer();
+      const token = localStorage.getItem('bb_token');
       const res   = await fetch('/api/netchex/parse', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/pdf', 'x-file-name': file.name },
+        headers: {
+          'Content-Type': 'application/pdf',
+          'x-file-name': file.name,
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
         body: bytes,
-        credentials: 'include',
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Parse failed.'); return; }

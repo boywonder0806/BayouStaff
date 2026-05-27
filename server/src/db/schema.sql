@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS employees (
   departments   TEXT[] NOT NULL DEFAULT '{}',
   position      TEXT,
   avatar        TEXT,
+  photo_url     TEXT,
   phone         TEXT,
   hire_date     DATE,
   is_active     BOOLEAN NOT NULL DEFAULT TRUE,

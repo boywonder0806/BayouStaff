@@ -1,10 +1,14 @@
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { addDays, format, parse } from 'date-fns';
+import { createRequire } from 'module';
+import { pathToFileURL } from 'url';
 
-pdfjs.GlobalWorkerOptions.workerSrc = '';
+const _require = createRequire(import.meta.url);
+const workerPath = _require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs');
+pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href;
 
 const dayHeaderPattern    = /^(\d{1,2})\s+(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/;
-const timePattern         = /^(\d{1,2}:\d{2})(AM|PM)$/i;
+const timePattern         = /^(\d{1,2}:\d{2})(AM|PM)/i;
 const footerPattern       = /^https?:|^Page\s+\d+\s+of\s+\d+$/i;
 const headerMetaPattern   = /^(Netchex Scheduler|\d{1,2}\/\d{1,2}\/\d{2},?\s*\d{0,2}|:|\\d{2}|AM|PM)$/i;
 
@@ -120,7 +124,7 @@ function employeeNameForBlock(rows) {
 function columnTimeEntries(rows, column) {
   return rows.flatMap((row, rowIndex) =>
     row.items
-      .filter(item => Math.abs(item.x - (column.x - 10)) <= 18 && timePattern.test(item.str))
+      .filter(item => Math.abs(item.x - column.x) <= 40 && timePattern.test(item.str))
       .map(item => ({ item, rowIndex }))
   );
 }
@@ -129,8 +133,8 @@ function departmentForShift(rows, column, afterRowIndex) {
   const parts = rows
     .slice(afterRowIndex + 1)
     .flatMap(row => row.items)
-    .filter(item => Math.abs(item.x - column.x) <= 30)
-    .filter(item => !timePattern.test(item.str) && item.str !== '-')
+    .filter(item => Math.abs(item.x - column.x) <= 45)
+    .filter(item => !timePattern.test(item.str) && item.str !== '-' && item.str !== '–')
     .map(item => item.str)
     .filter(v =>
       !isHoursText(v) &&
