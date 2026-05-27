@@ -62,13 +62,13 @@ export default function SysAdminDepartments() {
 
   const dept = departments.find(d => d.id === selectedId);
 
-  async function addPosition(deptName, name) {
+  async function addPosition(deptName, name, schedulingNotes = null) {
     const trimmed = name.trim();
     if (!trimmed) return;
     try {
       const { data } = await api.post(
         `/admin/departments/${encodeURIComponent(deptName)}/roles`,
-        { name: trimmed, type: 'position' }
+        { name: trimmed, type: 'position', schedulingNotes: schedulingNotes || null }
       );
       setAllEntries(prev => [...prev, data.role]);
     } catch (err) {
@@ -189,6 +189,7 @@ export default function SysAdminDepartments() {
                     dept={dept}
                     onUpdate={fields => updateEntry(entry.id, fields)}
                     onDelete={() => deleteEntry(entry.id)}
+                    onDuplicate={() => addPosition(dept.name, `${entry.name} (copy)`, entry.schedulingNotes)}
                   />
                 ))}
 
@@ -203,7 +204,7 @@ export default function SysAdminDepartments() {
 }
 
 // ── Entry row ─────────────────────────────────────────────────────────────────
-function EntryRow({ entry, index, dept, onUpdate, onDelete }) {
+function EntryRow({ entry, index, dept, onUpdate, onDelete, onDuplicate }) {
   const [editing, setEditing]           = useState(false);
   const [name, setName]                 = useState(entry.name);
   const [schedulingNotes, setNotes]     = useState(entry.schedulingNotes ?? '');
@@ -309,6 +310,13 @@ function EntryRow({ entry, index, dept, onUpdate, onDelete }) {
             <PencilIcon />
           </button>
           <button
+            onClick={onDuplicate}
+            className="p-1 rounded-md text-fog hover:text-cyan hover:bg-cyan/10 transition-colors"
+            title="Duplicate"
+          >
+            <DuplicateIcon />
+          </button>
+          <button
             onClick={onDelete}
             className="p-1 rounded-md text-fog hover:text-red-400 hover:bg-red-500/10 transition-colors"
             title="Delete"
@@ -400,6 +408,14 @@ function SparkleIcon({ className = 'w-4 h-4' }) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
       <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
+    </svg>
+  );
+}
+function DuplicateIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
+      <rect x="9" y="9" width="13" height="13" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
     </svg>
   );
 }
